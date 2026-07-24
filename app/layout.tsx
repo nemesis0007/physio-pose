@@ -15,7 +15,20 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "PhysioTwin | Movement intelligence for home rehabilitation",
   description:
-    "A hackathon prototype for on-device rehabilitation pose tracking, compensation detection and therapist review.",
+    "A privacy-first rehabilitation prototype with local video pose tracking, an exercise library and explainable therapist review.",
+  openGraph: {
+    title: "PhysioTwin | Movement intelligence for rehabilitation",
+    description:
+      "Private video movement assessment with transparent pose tracking and therapist-owned rules.",
+    images: ["/og.png"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "PhysioTwin | Movement intelligence for rehabilitation",
+    description:
+      "Private video movement assessment with transparent pose tracking and therapist-owned rules.",
+    images: ["/og.png"],
+  },
 };
 
 export default function RootLayout({
