@@ -74,7 +74,7 @@ export function ExerciseLibrary() {
                 }
               >
                 {exercise.automatedScoring
-                  ? "Automated scoring"
+                  ? "Heuristic scoring"
                   : "Pose overlay"}
               </span>
             </div>

@@ -7,13 +7,17 @@ import {
   type NormalizedLandmark,
 } from "@mediapipe/tasks-vision";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { EXERCISES } from "./exercise-data";
+import {
+  EXERCISES,
+  getScoringProfile,
+} from "./exercise-data";
 import { SiteFooter } from "./SiteFooter";
 import { SiteHeader } from "./SiteHeader";
 import {
-  advanceRep,
+  advanceProtocol,
   getPoseMetrics,
   initialRepTracker,
+  metricValue,
   type PoseMetrics,
   type RepDecision,
   type RepPhase,
@@ -47,16 +51,20 @@ const STATUS_COPY: Record<SessionStatus, string> = {
 };
 
 const PHASE_COPY: Record<RepPhase, string> = {
-  ready: "Stand tall",
-  descending: "Lower with control",
-  bottom: "Target range reached",
-  ascending: "Return to standing",
+  ready: "Move into the start position",
+  moving: "Movement detected",
+  target: "Target range reached",
+  returning: "Return with control",
+  holding: "Hold steady",
 };
 
 const MAX_VIDEO_BYTES = 250 * 1024 * 1024;
 
-function formatAngle(value: number | undefined) {
-  return value === undefined ? "—" : `${Math.round(value)}°`;
+function formatMetric(
+  value: number | undefined,
+  unit: "°" | "%",
+) {
+  return value === undefined ? "—" : `${Math.round(value)}${unit}`;
 }
 
 export function PhysioTwinApp() {
@@ -94,7 +102,7 @@ export function PhysioTwinApp() {
   const selectedExercise =
     EXERCISES.find((exercise) => exercise.id === selectedExerciseId) ??
     EXERCISES[0];
-  const automatedScoring = selectedExercise.automatedScoring;
+  const scoringProfile = getScoringProfile(selectedExercise.id);
 
   const speak = useCallback((text: string) => {
     if (!("speechSynthesis" in window)) return;
@@ -120,7 +128,7 @@ export function PhysioTwinApp() {
       ]);
       setMessage(
         decision.accepted
-          ? "Accepted — movement quality passed."
+          ? `Accepted — heuristic quality score ${decision.score}/100.`
           : decision.cue,
       );
       speak(decision.cue);
@@ -173,19 +181,17 @@ export function PhysioTwinApp() {
       }
 
       setStatus("tracking");
-      if (!automatedScoring) {
-        setMessage(
-          `${selectedExercise.name}: pose overlay active. Protocol-specific scoring is not yet enabled.`,
-        );
-        return;
-      }
-
-      const advanced = advanceRep(trackerRef.current, nextMetrics);
+      const advanced = advanceProtocol(
+        trackerRef.current,
+        nextMetrics,
+        scoringProfile,
+        performance.now(),
+      );
       trackerRef.current = advanced.tracker;
       setPhase(advanced.tracker.phase);
       if (advanced.decision) logDecision(advanced.decision);
     },
-    [automatedScoring, logDecision, selectedExercise.name],
+    [logDecision, scoringProfile],
   );
 
   const predictFrame = useCallback(() => {
@@ -390,11 +396,9 @@ export function PhysioTwinApp() {
     animationRef.current = null;
     setStatus("complete");
     setMessage(
-      automatedScoring
-        ? "Video complete. Review accepted repetitions and retries below."
-        : "Video complete. Pose landmarks were displayed; clinical scoring is not enabled for this protocol.",
+      "Video complete. Review the heuristic scores and traceable reasons below.",
     );
-  }, [automatedScoring]);
+  }, []);
 
   const painStop = useCallback(() => {
     stopSource();
@@ -407,30 +411,32 @@ export function PhysioTwinApp() {
 
   const simulateRep = useCallback(
     (accepted: boolean) => {
-      const decision: RepDecision = accepted
-        ? {
-            accepted: true,
-            minKneeAngle: 91,
-            maxTrunkLean: 10,
-            reason: "Movement stayed inside the prescribed bounds.",
-            cue: "Good repetition.",
-          }
-        : {
-            accepted: false,
-            minKneeAngle: 88,
-            maxTrunkLean: 24,
-            reason: "Trunk compensation reached 24 degrees.",
-            cue: "Keep your chest tall and retry.",
-          };
-      setMetrics({
-        kneeAngle: decision.minKneeAngle,
-        trunkLean: decision.maxTrunkLean,
-        confidence: 0.93,
-        side: "left",
-      });
+      const primaryValue = accepted
+        ? (scoringProfile.targetMin + scoringProfile.targetMax) / 2
+        : scoringProfile.direction === "increase"
+          ? Math.max(0, scoringProfile.targetMin - 20)
+          : scoringProfile.targetMax + 20;
+      const compensationValue = accepted
+        ? scoringProfile.compensationMax * 0.45
+        : scoringProfile.compensationMax + 8;
+      const decision: RepDecision = {
+        accepted,
+        score: accepted ? 92 : 58,
+        primaryLabel: scoringProfile.primaryLabel,
+        primaryValue,
+        primaryUnit: scoringProfile.unit,
+        compensationLabel: scoringProfile.compensationLabel,
+        compensationValue,
+        compensationUnit: scoringProfile.compensationUnit,
+        targetText: scoringProfile.targetText,
+        reason: accepted
+          ? `${scoringProfile.primaryLabel} reached the demo target with controlled compensation.`
+          : `${scoringProfile.primaryLabel} or compensation was outside the demo target.`,
+        cue: accepted ? "Good repetition." : scoringProfile.rangeCue,
+      };
       logDecision(decision);
     },
-    [logDecision],
+    [logDecision, scoringProfile],
   );
 
   useEffect(() => {
@@ -477,13 +483,8 @@ export function PhysioTwinApp() {
                 prepareSession();
                 setStatus("idle");
                 setSelectedExerciseId(event.target.value);
-                const exercise = EXERCISES.find(
-                  (item) => item.id === event.target.value,
-                );
                 setMessage(
-                  exercise?.automatedScoring
-                    ? "Automated scoring is available for this demo protocol."
-                    : "Pose overlay is available. Automated scoring still needs clinician validation.",
+                  "Hackathon heuristic scoring is available. Use the required camera view and review results with a physiotherapist.",
                 );
               }}
             >
@@ -493,11 +494,7 @@ export function PhysioTwinApp() {
                 </option>
               ))}
             </select>
-            <small>
-              {automatedScoring
-                ? "Automated ACCEPT / RETRY scoring available"
-                : "Video pose overlay only — no automated clinical score"}
-            </small>
+            <small>Explainable heuristic scoring available for every protocol</small>
           </label>
 
           <div className="hero-actions">
@@ -574,27 +571,49 @@ export function PhysioTwinApp() {
               </div>
             )}
             <div className="camera-badge">
-              {sourceActive && automatedScoring
-                ? PHASE_COPY[phase]
-                : sourceActive
-                  ? "Pose overlay only"
-                  : "Awaiting session"}
+              {sourceActive ? PHASE_COPY[phase] : "Awaiting session"}
             </div>
           </div>
           <div className="metric-strip">
             <div>
-              <span>Knee angle</span>
-              <strong>{formatAngle(metrics?.kneeAngle)}</strong>
-              <small>demo target 80–110°</small>
+              <span>{scoringProfile.primaryLabel}</span>
+              <strong>
+                {formatMetric(
+                  metrics
+                    ? metricValue(metrics, scoringProfile.metric)
+                    : undefined,
+                  scoringProfile.unit,
+                )}
+              </strong>
+              <small>target {scoringProfile.targetText}</small>
             </div>
             <div
               className={
-                metrics && metrics.trunkLean > 15 ? "metric-alert" : ""
+                metrics &&
+                metricValue(
+                  metrics,
+                  scoringProfile.compensationMetric,
+                ) > scoringProfile.compensationMax
+                  ? "metric-alert"
+                  : ""
               }
             >
-              <span>Trunk lean</span>
-              <strong>{formatAngle(metrics?.trunkLean)}</strong>
-              <small>demo limit &lt;15°</small>
+              <span>{scoringProfile.compensationLabel}</span>
+              <strong>
+                {formatMetric(
+                  metrics
+                    ? metricValue(
+                        metrics,
+                        scoringProfile.compensationMetric,
+                      )
+                    : undefined,
+                  scoringProfile.compensationUnit,
+                )}
+              </strong>
+              <small>
+                limit ≤{scoringProfile.compensationMax}
+                {scoringProfile.compensationUnit}
+              </small>
             </div>
             <div>
               <span>Confidence</span>
@@ -627,7 +646,9 @@ export function PhysioTwinApp() {
         <div>
           <span>Coverage</span>
           <strong>
-            {automatedScoring ? "Automated scoring" : "Pose overlay"}
+            {scoringProfile.mode === "hold"
+              ? `${scoringProfile.holdSeconds}s stability hold`
+              : "Rep-based heuristic"}
           </strong>
         </div>
       </section>
@@ -643,10 +664,10 @@ export function PhysioTwinApp() {
         </div>
         <div className="demo-actions">
           <button onClick={() => simulateRep(false)}>
-            Simulate wrong rep <span>24° trunk lean</span>
+            Simulate retry <span>outside protocol target</span>
           </button>
           <button onClick={() => simulateRep(true)}>
-            Simulate corrected rep <span>10° trunk lean</span>
+            Simulate accepted <span>inside protocol target</span>
           </button>
         </div>
       </section>
@@ -664,20 +685,20 @@ export function PhysioTwinApp() {
         </div>
         <div className="summary-grid">
           <article>
-            <span>Quality reps</span>
+            <span>Accepted attempts</span>
             <strong>
               {acceptedCount}
               <small> / {reps.length}</small>
             </strong>
-            <p>Accepted inside all prescribed demo bounds</p>
+            <p>Inside the selected heuristic profile</p>
           </article>
           <article>
-            <span>Quality rate</span>
+            <span>Acceptance rate</span>
             <strong>
               {qualityRate}
               <small>%</small>
             </strong>
-            <p>Chair sit-to-stand movement-quality score</p>
+            <p>{selectedExercise.name} session result</p>
           </article>
           <article>
             <span>Review flags</span>
@@ -695,8 +716,7 @@ export function PhysioTwinApp() {
           </div>
           {reps.length === 0 ? (
             <div className="empty-events">
-              Complete a scored chair sit-to-stand repetition or use the backup
-              demo controls.
+              Complete the selected movement or use the backup demo controls.
             </div>
           ) : (
             reps.slice(0, 5).map((rep) => (
@@ -710,8 +730,9 @@ export function PhysioTwinApp() {
                   {rep.accepted ? "ACCEPT" : "RETRY"}
                 </span>
                 <span>
-                  Knee {Math.round(rep.minKneeAngle)}° · Trunk{" "}
-                  {Math.round(rep.maxTrunkLean)}°
+                  Score {rep.score}/100 · {rep.primaryLabel}{" "}
+                  {Math.round(rep.primaryValue)}
+                  {rep.primaryUnit}
                 </span>
                 <span>{rep.reason}</span>
                 <span>{rep.time}</span>

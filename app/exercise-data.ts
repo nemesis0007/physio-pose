@@ -18,7 +18,44 @@ export type Exercise = {
   automatedScoring: boolean;
 };
 
-export const EXERCISES: Exercise[] = [
+export type MetricKey =
+  | "kneeAngle"
+  | "kneeBend"
+  | "hipAngle"
+  | "shoulderAngle"
+  | "elbowAngle"
+  | "elbowBend"
+  | "ankleAngle"
+  | "trunkLean"
+  | "pelvisTilt"
+  | "wristSpan"
+  | "kneeSpan"
+  | "ankleSpan"
+  | "heelLift"
+  | "reachSpan"
+  | "singleLegLift";
+
+export type ScoringProfile = {
+  mode: "rep" | "hold";
+  metric: MetricKey;
+  primaryLabel: string;
+  unit: "°" | "%";
+  direction: "increase" | "decrease";
+  startThreshold: number;
+  targetMin: number;
+  targetMax: number;
+  returnThreshold: number;
+  targetText: string;
+  compensationMetric: MetricKey;
+  compensationLabel: string;
+  compensationUnit: "°" | "%";
+  compensationMax: number;
+  rangeCue: string;
+  compensationCue: string;
+  holdSeconds?: number;
+};
+
+const EXERCISE_LIBRARY: Exercise[] = [
   {
     id: "chair-sit-to-stand",
     name: "Chair sit-to-stand",
@@ -284,6 +321,229 @@ export const EXERCISES: Exercise[] = [
     automatedScoring: false,
   },
 ];
+
+export const EXERCISES: Exercise[] = EXERCISE_LIBRARY.map((exercise) => ({
+  ...exercise,
+  automatedScoring: true,
+}));
+
+function rep(
+  metric: MetricKey,
+  primaryLabel: string,
+  unit: "°" | "%",
+  direction: "increase" | "decrease",
+  startThreshold: number,
+  targetMin: number,
+  targetMax: number,
+  returnThreshold: number,
+  targetText: string,
+  compensationMetric: MetricKey,
+  compensationLabel: string,
+  compensationUnit: "°" | "%",
+  compensationMax: number,
+  rangeCue: string,
+  compensationCue: string,
+): ScoringProfile {
+  return {
+    mode: "rep",
+    metric,
+    primaryLabel,
+    unit,
+    direction,
+    startThreshold,
+    targetMin,
+    targetMax,
+    returnThreshold,
+    targetText,
+    compensationMetric,
+    compensationLabel,
+    compensationUnit,
+    compensationMax,
+    rangeCue,
+    compensationCue,
+  };
+}
+
+function hold(
+  metric: MetricKey,
+  primaryLabel: string,
+  unit: "°" | "%",
+  targetMin: number,
+  targetMax: number,
+  targetText: string,
+  compensationMetric: MetricKey,
+  compensationLabel: string,
+  compensationUnit: "°" | "%",
+  compensationMax: number,
+  holdSeconds: number,
+): ScoringProfile {
+  return {
+    mode: "hold",
+    metric,
+    primaryLabel,
+    unit,
+    direction: "increase",
+    startThreshold: targetMin,
+    targetMin,
+    targetMax,
+    returnThreshold: targetMin,
+    targetText,
+    compensationMetric,
+    compensationLabel,
+    compensationUnit,
+    compensationMax,
+    rangeCue: "Move into the demonstrated hold position.",
+    compensationCue: "Steady your body and use nearby support.",
+    holdSeconds,
+  };
+}
+
+export const SCORING_PROFILES: Record<string, ScoringProfile> = {
+  "chair-sit-to-stand": rep(
+    "kneeAngle", "Knee angle", "°", "decrease", 145, 80, 110, 155,
+    "80–110°", "trunkLean", "Trunk lean", "°", 15,
+    "Move through the demonstrated chair-squat range.",
+    "Keep your chest tall and retry.",
+  ),
+  "heel-slide": rep(
+    "kneeAngle", "Knee angle", "°", "decrease", 155, 90, 135, 165,
+    "90–135°", "pelvisTilt", "Pelvis movement", "°", 45,
+    "Slide the heel farther within the demonstrated range.",
+    "Keep the pelvis quiet as the heel slides.",
+  ),
+  "seated-knee-extension": rep(
+    "kneeAngle", "Knee extension", "°", "increase", 125, 155, 180, 115,
+    "155–180°", "trunkLean", "Trunk lean", "°", 25,
+    "Straighten the knee through the demonstrated range.",
+    "Stay tall without leaning back.",
+  ),
+  "straight-leg-raise": rep(
+    "hipAngle", "Hip angle", "°", "decrease", 165, 95, 145, 170,
+    "95–145°", "kneeBend", "Knee bend", "°", 18,
+    "Lift the straight leg through the demonstrated range.",
+    "Keep the knee straight as the leg lifts.",
+  ),
+  "mini-squat": rep(
+    "kneeAngle", "Knee angle", "°", "decrease", 160, 115, 145, 165,
+    "115–145°", "trunkLean", "Trunk lean", "°", 18,
+    "Lower a little farther with control.",
+    "Keep your chest tall and knees aligned.",
+  ),
+  "step-up": rep(
+    "kneeAngle", "Lead-knee angle", "°", "decrease", 150, 75, 125, 160,
+    "75–125°", "pelvisTilt", "Pelvis tilt", "°", 20,
+    "Lift the knee through the demonstrated step range.",
+    "Keep the pelvis level as you step.",
+  ),
+  "glute-bridge": rep(
+    "hipAngle", "Hip extension", "°", "increase", 120, 145, 180, 110,
+    "145–180°", "pelvisTilt", "Pelvis tilt", "°", 25,
+    "Lift the hips through the demonstrated range.",
+    "Lift evenly without rotating the pelvis.",
+  ),
+  "clamshell": rep(
+    "kneeSpan", "Knee separation", "%", "increase", 55, 70, 170, 58,
+    "70–170%", "pelvisTilt", "Pelvis roll", "°", 35,
+    "Open the top knee through the demonstrated range.",
+    "Keep the pelvis stacked as the knee opens.",
+  ),
+  "hip-abduction": rep(
+    "hipAngle", "Hip angle", "°", "decrease", 165, 105, 150, 170,
+    "105–150°", "pelvisTilt", "Pelvis roll", "°", 30,
+    "Lift the leg through the demonstrated range.",
+    "Keep the pelvis stacked and lead with the heel.",
+  ),
+  "standing-hip-extension": rep(
+    "hipAngle", "Hip angle", "°", "decrease", 170, 135, 165, 175,
+    "135–165°", "trunkLean", "Trunk lean", "°", 15,
+    "Move the leg backward through the demonstrated range.",
+    "Keep the trunk upright as the leg moves.",
+  ),
+  pendulum: rep(
+    "shoulderAngle", "Shoulder swing", "°", "increase", 12, 20, 65, 10,
+    "20–65°", "elbowBend", "Elbow bend", "°", 45,
+    "Let the relaxed arm swing through the demonstrated range.",
+    "Keep the arm relaxed rather than actively bending it.",
+  ),
+  "wall-slide": rep(
+    "shoulderAngle", "Shoulder elevation", "°", "increase", 55, 100, 175, 45,
+    "100–175°", "trunkLean", "Trunk lean", "°", 18,
+    "Slide upward through the demonstrated range.",
+    "Keep the ribs and trunk controlled.",
+  ),
+  "shoulder-abduction": rep(
+    "shoulderAngle", "Shoulder abduction", "°", "increase", 40, 70, 125, 30,
+    "70–125°", "trunkLean", "Trunk lean", "°", 15,
+    "Raise the arm through the demonstrated range.",
+    "Stay tall without leaning to the side.",
+  ),
+  "external-rotation": rep(
+    "wristSpan", "Wrist separation", "%", "increase", 90, 115, 230, 95,
+    "115–230%", "elbowBend", "Elbow bend", "°", 110,
+    "Rotate outward through the demonstrated range.",
+    "Keep both elbows tucked and softly bent.",
+  ),
+  "pelvic-tilt": rep(
+    "hipAngle", "Lumbopelvic angle", "°", "increase", 105, 115, 150, 100,
+    "115–150°", "pelvisTilt", "Pelvis rotation", "°", 45,
+    "Gently complete the demonstrated pelvic motion.",
+    "Keep the movement small and controlled.",
+  ),
+  "cat-cow": rep(
+    "hipAngle", "Trunk-hip angle", "°", "decrease", 160, 110, 150, 165,
+    "110–150°", "elbowBend", "Elbow bend", "°", 25,
+    "Move the spine through the demonstrated range.",
+    "Keep the arms long and distribute the motion.",
+  ),
+  "bird-dog": rep(
+    "reachSpan", "Opposite-limb reach", "%", "increase", 250, 300, 520, 260,
+    "300–520%", "pelvisTilt", "Pelvis tilt", "°", 22,
+    "Reach the opposite arm and leg farther.",
+    "Keep the pelvis level while reaching.",
+  ),
+  "prone-press-up": rep(
+    "elbowAngle", "Elbow extension", "°", "increase", 110, 145, 180, 100,
+    "145–180°", "pelvisTilt", "Pelvis movement", "°", 40,
+    "Press up through the demonstrated range.",
+    "Keep the pelvis relaxed and centred.",
+  ),
+  "ankle-pumps": rep(
+    "ankleAngle", "Ankle angle", "°", "increase", 110, 125, 170, 105,
+    "125–170°", "kneeBend", "Knee bend", "°", 30,
+    "Point the foot through the demonstrated range.",
+    "Keep the knee and leg still.",
+  ),
+  "calf-raise": rep(
+    "heelLift", "Heel lift", "%", "increase", 4, 6, 28, 3,
+    "6–28%", "trunkLean", "Trunk lean", "°", 15,
+    "Rise higher onto the toes with control.",
+    "Stay tall and avoid leaning forward.",
+  ),
+  "ankle-inversion-eversion": rep(
+    "ankleAngle", "Ankle angle", "°", "decrease", 105, 65, 100, 110,
+    "65–100°", "kneeBend", "Knee bend", "°", 35,
+    "Move the foot through the demonstrated range.",
+    "Keep the knee still while the ankle moves.",
+  ),
+  "tandem-stance": hold(
+    "trunkLean", "Trunk sway", "°", 0, 12, "≤12°",
+    "pelvisTilt", "Pelvis tilt", "°", 18, 3,
+  ),
+  "single-leg-balance": hold(
+    "singleLegLift", "Foot clearance", "%", 8, 100, "8–100%",
+    "pelvisTilt", "Pelvis tilt", "°", 20, 3,
+  ),
+  "lateral-step": rep(
+    "ankleSpan", "Step width", "%", "increase", 115, 145, 320, 120,
+    "145–320%", "trunkLean", "Trunk lean", "°", 18,
+    "Step wider through the demonstrated range.",
+    "Keep the trunk tall as you step sideways.",
+  ),
+};
+
+export function getScoringProfile(exerciseId: string) {
+  return SCORING_PROFILES[exerciseId] ?? SCORING_PROFILES["chair-sit-to-stand"];
+}
 
 export const EXERCISE_CATEGORIES = [
   "All",

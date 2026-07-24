@@ -19,12 +19,12 @@ export default function ExercisesPage() {
       </section>
       <section className="content-page">
         <div className="safety-callout">
-          <strong>Coverage is honest by design.</strong>
+          <strong>All protocols now have explainable demo scoring.</strong>
           <p>
-            Every movement supports private video playback and pose overlay.
-            Automated ACCEPT / RETRY scoring is currently calibrated only for
-            chair sit-to-stand; the remaining protocols need clinician-defined
-            rules and validation before scoring is enabled.
+            Every movement supports private video playback, pose overlay and a
+            visible rep-range or stability-hold heuristic. These hackathon
+            profiles demonstrate the product workflow; a physiotherapist must
+            review and validate every threshold before patient use.
           </p>
         </div>
         <ExerciseLibrary />

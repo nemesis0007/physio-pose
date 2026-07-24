@@ -25,7 +25,7 @@ const PROCESS = [
   {
     step: "05",
     title: "Apply protocol rules",
-    body: "For the chair sit-to-stand demo, therapist-defined limits check knee range and trunk compensation. No language model makes the decision.",
+    body: "The selected exercise profile checks its primary range plus a visible compensation measure. These hackathon thresholds are transparent and designed to be replaced by clinician-approved values.",
   },
   {
     step: "06",
@@ -96,13 +96,13 @@ export default function HowItWorksPage() {
               <strong>Rep detection</strong>
               <span>Finite-state machine</span>
               <span>No ML</span>
-              <span>Segments a complete chair sit-to-stand repetition</span>
+              <span>Segments repetitions or timed stability holds</span>
             </div>
             <div className="model-row">
               <strong>Quality decision</strong>
-              <span>Therapist-defined thresholds</span>
+              <span>24 transparent hackathon rule profiles</span>
               <span>No ML</span>
-              <span>Produces ACCEPT or RETRY with a traceable reason</span>
+              <span>Produces a 0–100 heuristic score and traceable reason</span>
             </div>
             <div className="model-row">
               <strong>Voice cue</strong>
