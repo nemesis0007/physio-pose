@@ -1,0 +1,841 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import type { Exercise } from "./exercise-data";
+
+type Pose = {
+  rootY: number;
+  rootX: number;
+  rootZ: number;
+  torsoX: number;
+  torsoZ: number;
+  leftShoulderX: number;
+  leftShoulderZ: number;
+  rightShoulderX: number;
+  rightShoulderZ: number;
+  leftElbowX: number;
+  leftElbowZ: number;
+  rightElbowX: number;
+  rightElbowZ: number;
+  leftHipX: number;
+  leftHipZ: number;
+  rightHipX: number;
+  rightHipZ: number;
+  leftKneeX: number;
+  leftKneeZ: number;
+  rightKneeX: number;
+  rightKneeZ: number;
+  leftAnkleX: number;
+  leftAnkleZ: number;
+  rightAnkleX: number;
+  rightAnkleZ: number;
+};
+
+type Rig = {
+  root: THREE.Group;
+  torso: THREE.Group;
+  leftShoulder: THREE.Group;
+  rightShoulder: THREE.Group;
+  leftElbow: THREE.Group;
+  rightElbow: THREE.Group;
+  leftHip: THREE.Group;
+  rightHip: THREE.Group;
+  leftKnee: THREE.Group;
+  rightKnee: THREE.Group;
+  leftAnkle: THREE.Group;
+  rightAnkle: THREE.Group;
+  chair: THREE.Group;
+  step: THREE.Mesh;
+  wall: THREE.Mesh;
+  mat: THREE.Mesh;
+};
+
+const DEG = Math.PI / 180;
+
+const STANDING: Pose = {
+  rootY: 0,
+  rootX: 0,
+  rootZ: 0,
+  torsoX: 0,
+  torsoZ: 0,
+  leftShoulderX: 0,
+  leftShoulderZ: 3,
+  rightShoulderX: 0,
+  rightShoulderZ: -3,
+  leftElbowX: 0,
+  leftElbowZ: 0,
+  rightElbowX: 0,
+  rightElbowZ: 0,
+  leftHipX: 0,
+  leftHipZ: 2,
+  rightHipX: 0,
+  rightHipZ: -2,
+  leftKneeX: 0,
+  leftKneeZ: 0,
+  rightKneeX: 0,
+  rightKneeZ: 0,
+  leftAnkleX: 0,
+  leftAnkleZ: 0,
+  rightAnkleX: 0,
+  rightAnkleZ: 0,
+};
+
+function pose(changes: Partial<Pose>): Pose {
+  return { ...STANDING, ...changes };
+}
+
+function interpolatePose(from: Pose, to: Pose, progress: number): Pose {
+  const eased = progress * progress * (3 - 2 * progress);
+  const result = { ...from };
+  for (const key of Object.keys(result) as Array<keyof Pose>) {
+    result[key] = THREE.MathUtils.lerp(from[key], to[key], eased);
+  }
+  return result;
+}
+
+const FLOOR_IDS = new Set([
+  "heel-slide",
+  "straight-leg-raise",
+  "glute-bridge",
+  "clamshell",
+  "hip-abduction",
+  "pelvic-tilt",
+  "cat-cow",
+  "bird-dog",
+  "prone-press-up",
+]);
+
+const CHAIR_IDS = new Set([
+  "chair-sit-to-stand",
+  "seated-knee-extension",
+  "ankle-pumps",
+]);
+
+function exerciseKeyframes(exerciseId: string): [Pose, Pose] {
+  switch (exerciseId) {
+    case "chair-sit-to-stand":
+      return [
+        STANDING,
+        pose({
+          rootY: -0.58,
+          torsoX: 16,
+          leftHipX: -72,
+          rightHipX: -72,
+          leftKneeX: 94,
+          rightKneeX: 94,
+          leftShoulderX: -18,
+          rightShoulderX: -18,
+        }),
+      ];
+    case "heel-slide":
+      return [
+        pose({ rootZ: -90, rootY: -0.72 }),
+        pose({
+          rootZ: -90,
+          rootY: -0.72,
+          rightHipZ: -42,
+          rightKneeZ: 92,
+        }),
+      ];
+    case "seated-knee-extension":
+      return [
+        pose({
+          rootY: -0.5,
+          leftHipX: -82,
+          rightHipX: -82,
+          leftKneeX: 88,
+          rightKneeX: 88,
+        }),
+        pose({
+          rootY: -0.5,
+          leftHipX: -82,
+          rightHipX: -82,
+          leftKneeX: 88,
+          rightKneeX: 2,
+        }),
+      ];
+    case "straight-leg-raise":
+      return [
+        pose({ rootZ: -90, rootY: -0.72 }),
+        pose({ rootZ: -90, rootY: -0.72, rightHipZ: -42 }),
+      ];
+    case "mini-squat":
+      return [
+        STANDING,
+        pose({
+          rootY: -0.3,
+          torsoX: 8,
+          leftHipX: -38,
+          rightHipX: -38,
+          leftKneeX: 48,
+          rightKneeX: 48,
+        }),
+      ];
+    case "step-up":
+      return [
+        STANDING,
+        pose({
+          rootY: 0.12,
+          rightHipX: -72,
+          rightKneeX: 90,
+          leftKneeX: 12,
+        }),
+      ];
+    case "glute-bridge":
+      return [
+        pose({
+          rootZ: -90,
+          rootY: -0.62,
+          leftHipZ: -48,
+          rightHipZ: -48,
+          leftKneeZ: 92,
+          rightKneeZ: 92,
+        }),
+        pose({
+          rootZ: -90,
+          rootY: -0.34,
+          leftHipZ: -12,
+          rightHipZ: -12,
+          leftKneeZ: 72,
+          rightKneeZ: 72,
+        }),
+      ];
+    case "clamshell":
+      return [
+        pose({
+          rootZ: -90,
+          rootY: -0.65,
+          leftHipZ: -40,
+          rightHipZ: -40,
+          leftKneeZ: 85,
+          rightKneeZ: 85,
+        }),
+        pose({
+          rootZ: -90,
+          rootY: -0.65,
+          leftHipZ: -40,
+          rightHipZ: -40,
+          leftHipX: 35,
+          leftKneeZ: 85,
+          rightKneeZ: 85,
+        }),
+      ];
+    case "hip-abduction":
+      return [
+        pose({ rootZ: -90, rootY: -0.68 }),
+        pose({ rootZ: -90, rootY: -0.68, leftHipX: 42 }),
+      ];
+    case "standing-hip-extension":
+      return [STANDING, pose({ rightHipX: 28, torsoX: -2 })];
+    case "pendulum":
+      return [
+        pose({ torsoX: 35, rightShoulderX: -18 }),
+        pose({ torsoX: 35, rightShoulderX: 38 }),
+      ];
+    case "wall-slide":
+      return [
+        pose({
+          leftShoulderZ: 45,
+          rightShoulderZ: -45,
+          leftElbowZ: 75,
+          rightElbowZ: -75,
+        }),
+        pose({
+          leftShoulderZ: 155,
+          rightShoulderZ: -155,
+          leftElbowZ: 8,
+          rightElbowZ: -8,
+        }),
+      ];
+    case "shoulder-abduction":
+      return [
+        STANDING,
+        pose({ leftShoulderZ: 88, rightShoulderZ: -88 }),
+      ];
+    case "external-rotation":
+      return [
+        pose({
+          leftShoulderZ: 12,
+          rightShoulderZ: -12,
+          leftElbowX: -78,
+          rightElbowX: -78,
+        }),
+        pose({
+          leftShoulderZ: 12,
+          rightShoulderZ: -12,
+          leftElbowX: -78,
+          rightElbowX: -78,
+          leftElbowZ: 52,
+          rightElbowZ: -52,
+        }),
+      ];
+    case "pelvic-tilt":
+      return [
+        pose({
+          rootZ: -90,
+          rootY: -0.66,
+          leftHipZ: -48,
+          rightHipZ: -48,
+          leftKneeZ: 92,
+          rightKneeZ: 92,
+        }),
+        pose({
+          rootZ: -84,
+          rootY: -0.61,
+          leftHipZ: -48,
+          rightHipZ: -48,
+          leftKneeZ: 92,
+          rightKneeZ: 92,
+        }),
+      ];
+    case "cat-cow":
+      return [
+        pose({
+          rootZ: -90,
+          rootY: -0.25,
+          leftShoulderZ: -82,
+          rightShoulderZ: -82,
+          leftHipZ: 82,
+          rightHipZ: 82,
+          leftKneeZ: -88,
+          rightKneeZ: -88,
+        }),
+        pose({
+          rootZ: -90,
+          rootY: -0.2,
+          torsoZ: 13,
+          leftShoulderZ: -82,
+          rightShoulderZ: -82,
+          leftHipZ: 82,
+          rightHipZ: 82,
+          leftKneeZ: -88,
+          rightKneeZ: -88,
+        }),
+      ];
+    case "bird-dog":
+      return [
+        pose({
+          rootZ: -90,
+          rootY: -0.25,
+          leftShoulderZ: -82,
+          rightShoulderZ: -82,
+          leftHipZ: 82,
+          rightHipZ: 82,
+          leftKneeZ: -88,
+          rightKneeZ: -88,
+        }),
+        pose({
+          rootZ: -90,
+          rootY: -0.25,
+          leftShoulderZ: -165,
+          rightShoulderZ: -82,
+          leftHipZ: 82,
+          rightHipZ: 8,
+          leftKneeZ: -88,
+          rightKneeZ: 0,
+        }),
+      ];
+    case "prone-press-up":
+      return [
+        pose({
+          rootZ: -90,
+          rootY: -0.7,
+          leftShoulderZ: -55,
+          rightShoulderZ: -55,
+          leftElbowZ: 105,
+          rightElbowZ: 105,
+        }),
+        pose({
+          rootZ: -72,
+          rootY: -0.5,
+          leftShoulderZ: -75,
+          rightShoulderZ: -75,
+          leftElbowZ: 15,
+          rightElbowZ: 15,
+        }),
+      ];
+    case "ankle-pumps":
+      return [
+        pose({
+          rootY: -0.5,
+          leftHipX: -82,
+          rightHipX: -82,
+          leftKneeX: 5,
+          rightKneeX: 5,
+          leftAnkleX: -24,
+          rightAnkleX: -24,
+        }),
+        pose({
+          rootY: -0.5,
+          leftHipX: -82,
+          rightHipX: -82,
+          leftKneeX: 5,
+          rightKneeX: 5,
+          leftAnkleX: 25,
+          rightAnkleX: 25,
+        }),
+      ];
+    case "calf-raise":
+      return [
+        STANDING,
+        pose({
+          rootY: 0.18,
+          leftAnkleX: -24,
+          rightAnkleX: -24,
+        }),
+      ];
+    case "ankle-inversion-eversion":
+      return [
+        pose({ leftAnkleZ: -16, rightAnkleZ: -16 }),
+        pose({ leftAnkleZ: 16, rightAnkleZ: 16 }),
+      ];
+    case "tandem-stance":
+      return [
+        pose({ leftHipX: -12, rightHipX: 12 }),
+        pose({ leftHipX: -12, rightHipX: 12, torsoZ: 2 }),
+      ];
+    case "single-leg-balance":
+      return [
+        pose({ rightHipX: -55, rightKneeX: 86 }),
+        pose({ rightHipX: -58, rightKneeX: 90, torsoZ: 2 }),
+      ];
+    case "lateral-step":
+      return [
+        STANDING,
+        pose({
+          leftHipZ: 34,
+          rightHipZ: -34,
+          leftShoulderZ: 16,
+          rightShoulderZ: -16,
+        }),
+      ];
+    default:
+      return [STANDING, pose({ rightShoulderZ: -90 })];
+  }
+}
+
+function material(color: number, roughness = 0.72) {
+  return new THREE.MeshStandardMaterial({ color, roughness });
+}
+
+function addSegment(
+  parent: THREE.Group,
+  length: number,
+  radius: number,
+  color: number,
+) {
+  const mesh = new THREE.Mesh(
+    new THREE.CapsuleGeometry(radius, length - radius * 2, 8, 16),
+    material(color),
+  );
+  mesh.position.y = -length / 2;
+  parent.add(mesh);
+  return mesh;
+}
+
+function joint(parent: THREE.Group, radius: number) {
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 20, 14),
+    material(0xf7c873, 0.55),
+  );
+  parent.add(mesh);
+  return mesh;
+}
+
+function createRig(scene: THREE.Scene): Rig {
+  const root = new THREE.Group();
+  root.position.y = 1.34;
+  scene.add(root);
+
+  const pelvis = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.24, 0.14, 8, 20),
+    material(0x183f52),
+  );
+  pelvis.rotation.z = Math.PI / 2;
+  root.add(pelvis);
+
+  const torso = new THREE.Group();
+  root.add(torso);
+  const torsoMesh = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.3, 0.64, 10, 24),
+    material(0x0f9d8d),
+  );
+  torsoMesh.position.y = 0.48;
+  torso.add(torsoMesh);
+
+  const neck = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.1, 0.11, 0.18, 16),
+    material(0xe3b58f),
+  );
+  neck.position.y = 0.96;
+  torso.add(neck);
+
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.22, 24, 18),
+    material(0xe3b58f),
+  );
+  head.scale.set(0.84, 1.06, 0.9);
+  head.position.y = 1.22;
+  torso.add(head);
+
+  const leftShoulder = new THREE.Group();
+  leftShoulder.position.set(-0.34, 0.82, 0);
+  torso.add(leftShoulder);
+  joint(leftShoulder, 0.105);
+  addSegment(leftShoulder, 0.54, 0.09, 0x1a5368);
+  const leftElbow = new THREE.Group();
+  leftElbow.position.y = -0.54;
+  leftShoulder.add(leftElbow);
+  joint(leftElbow, 0.085);
+  addSegment(leftElbow, 0.48, 0.075, 0xe3b58f);
+  const leftHand = new THREE.Mesh(
+    new THREE.SphereGeometry(0.105, 16, 12),
+    material(0xe3b58f),
+  );
+  leftHand.scale.set(0.8, 1.25, 0.6);
+  leftHand.position.y = -0.53;
+  leftElbow.add(leftHand);
+
+  const rightShoulder = leftShoulder.clone();
+  rightShoulder.position.x = 0.34;
+  torso.add(rightShoulder);
+  const rightElbow = rightShoulder.children[2] as THREE.Group;
+
+  const leftHip = new THREE.Group();
+  leftHip.position.set(-0.16, -0.08, 0);
+  root.add(leftHip);
+  joint(leftHip, 0.12);
+  addSegment(leftHip, 0.68, 0.12, 0x173e52);
+  const leftKnee = new THREE.Group();
+  leftKnee.position.y = -0.68;
+  leftHip.add(leftKnee);
+  joint(leftKnee, 0.105);
+  addSegment(leftKnee, 0.66, 0.095, 0x214f64);
+  const leftAnkle = new THREE.Group();
+  leftAnkle.position.y = -0.66;
+  leftKnee.add(leftAnkle);
+  joint(leftAnkle, 0.08);
+  const leftFoot = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.095, 0.28, 6, 14),
+    material(0x102b3b),
+  );
+  leftFoot.rotation.x = Math.PI / 2;
+  leftFoot.position.set(0, -0.05, 0.16);
+  leftAnkle.add(leftFoot);
+
+  const rightHip = leftHip.clone();
+  rightHip.position.x = 0.16;
+  root.add(rightHip);
+  const rightKnee = rightHip.children[2] as THREE.Group;
+  const rightAnkle = rightKnee.children[2] as THREE.Group;
+
+  const chair = new THREE.Group();
+  const seat = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 0.12, 0.9),
+    material(0xf7c873),
+  );
+  seat.position.set(0, 0.68, 0.45);
+  chair.add(seat);
+  const back = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 0.85, 0.12),
+    material(0xf7c873),
+  );
+  back.position.set(0, 1.08, 0.84);
+  chair.add(back);
+  for (const x of [-0.36, 0.36]) {
+    for (const z of [0.12, 0.76]) {
+      const leg = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.045, 0.055, 0.68, 12),
+        material(0x9a6f31),
+      );
+      leg.position.set(x, 0.34, z);
+      chair.add(leg);
+    }
+  }
+  scene.add(chair);
+
+  const step = new THREE.Mesh(
+    new THREE.BoxGeometry(1.2, 0.3, 0.78),
+    material(0xf7c873),
+  );
+  step.position.set(0, 0.15, -0.15);
+  scene.add(step);
+
+  const wall = new THREE.Mesh(
+    new THREE.BoxGeometry(2.8, 3.4, 0.08),
+    new THREE.MeshStandardMaterial({
+      color: 0xcfe7e4,
+      transparent: true,
+      opacity: 0.35,
+    }),
+  );
+  wall.position.set(0, 1.45, 0.75);
+  scene.add(wall);
+
+  const mat = new THREE.Mesh(
+    new THREE.BoxGeometry(3.4, 0.05, 1.5),
+    material(0x68e3d2),
+  );
+  mat.position.y = 0.025;
+  scene.add(mat);
+
+  return {
+    root,
+    torso,
+    leftShoulder,
+    rightShoulder,
+    leftElbow,
+    rightElbow,
+    leftHip,
+    rightHip,
+    leftKnee,
+    rightKnee,
+    leftAnkle,
+    rightAnkle,
+    chair,
+    step,
+    wall,
+    mat,
+  };
+}
+
+function applyPose(rig: Rig, value: Pose) {
+  rig.root.position.y = 1.34 + value.rootY;
+  rig.root.rotation.set(
+    value.rootX * DEG,
+    0,
+    value.rootZ * DEG,
+  );
+  rig.torso.rotation.set(value.torsoX * DEG, 0, value.torsoZ * DEG);
+  rig.leftShoulder.rotation.set(
+    value.leftShoulderX * DEG,
+    0,
+    value.leftShoulderZ * DEG,
+  );
+  rig.rightShoulder.rotation.set(
+    value.rightShoulderX * DEG,
+    0,
+    value.rightShoulderZ * DEG,
+  );
+  rig.leftElbow.rotation.set(
+    value.leftElbowX * DEG,
+    0,
+    value.leftElbowZ * DEG,
+  );
+  rig.rightElbow.rotation.set(
+    value.rightElbowX * DEG,
+    0,
+    value.rightElbowZ * DEG,
+  );
+  rig.leftHip.rotation.set(
+    value.leftHipX * DEG,
+    0,
+    value.leftHipZ * DEG,
+  );
+  rig.rightHip.rotation.set(
+    value.rightHipX * DEG,
+    0,
+    value.rightHipZ * DEG,
+  );
+  rig.leftKnee.rotation.set(
+    value.leftKneeX * DEG,
+    0,
+    value.leftKneeZ * DEG,
+  );
+  rig.rightKnee.rotation.set(
+    value.rightKneeX * DEG,
+    0,
+    value.rightKneeZ * DEG,
+  );
+  rig.leftAnkle.rotation.set(
+    value.leftAnkleX * DEG,
+    0,
+    value.leftAnkleZ * DEG,
+  );
+  rig.rightAnkle.rotation.set(
+    value.rightAnkleX * DEG,
+    0,
+    value.rightAnkleZ * DEG,
+  );
+}
+
+export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const rigRef = useRef<Rig | null>(null);
+  const exerciseIdRef = useRef(exercise.id);
+  const playingRef = useRef(true);
+  const speedRef = useRef(0.65);
+  const [playing, setPlaying] = useState(true);
+  const [slow, setSlow] = useState(true);
+
+  useEffect(() => {
+    exerciseIdRef.current = exercise.id;
+    const rig = rigRef.current;
+    if (rig) {
+      rig.chair.visible = CHAIR_IDS.has(exercise.id);
+      rig.step.visible = exercise.id === "step-up";
+      rig.wall.visible = exercise.id === "wall-slide";
+      rig.mat.visible = FLOOR_IDS.has(exercise.id);
+    }
+  }, [exercise.id]);
+
+  useEffect(() => {
+    playingRef.current = playing;
+  }, [playing]);
+
+  useEffect(() => {
+    speedRef.current = slow ? 0.65 : 1.05;
+  }, [slow]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a1821);
+    scene.fog = new THREE.Fog(0x0a1821, 6, 11);
+
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 50);
+    camera.position.set(3.8, 2.4, 5.4);
+    camera.lookAt(0, 1.25, 0);
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: "high-performance",
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.shadowMap.enabled = true;
+    host.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 1.2, 0);
+    controls.enableDamping = true;
+    controls.enablePan = false;
+    controls.minDistance = 3.5;
+    controls.maxDistance = 8;
+    controls.maxPolarAngle = Math.PI / 2.02;
+
+    scene.add(new THREE.HemisphereLight(0xd9fffa, 0x102b3b, 2.2));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.8);
+    keyLight.position.set(3, 6, 4);
+    keyLight.castShadow = true;
+    scene.add(keyLight);
+    const rimLight = new THREE.DirectionalLight(0x68e3d2, 1.8);
+    rimLight.position.set(-4, 3, -3);
+    scene.add(rimLight);
+
+    const floor = new THREE.Mesh(
+      new THREE.CircleGeometry(4.2, 64),
+      new THREE.MeshStandardMaterial({
+        color: 0x102b3b,
+        roughness: 0.9,
+      }),
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    const grid = new THREE.GridHelper(7, 14, 0x286071, 0x173744);
+    grid.position.y = 0.005;
+    scene.add(grid);
+
+    const rig = createRig(scene);
+    rigRef.current = rig;
+    rig.chair.visible = CHAIR_IDS.has(exerciseIdRef.current);
+    rig.step.visible = exerciseIdRef.current === "step-up";
+    rig.wall.visible = exerciseIdRef.current === "wall-slide";
+    rig.mat.visible = FLOOR_IDS.has(exerciseIdRef.current);
+
+    const resize = () => {
+      const { width, height } = host.getBoundingClientRect();
+      renderer.setSize(width, height, false);
+      camera.aspect = width / Math.max(height, 1);
+      camera.updateProjectionMatrix();
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(host);
+    resize();
+
+    const clock = new THREE.Clock();
+    let elapsed = 0;
+    let frame = 0;
+    const animate = () => {
+      frame = requestAnimationFrame(animate);
+      const delta = Math.min(clock.getDelta(), 0.05);
+      if (playingRef.current) elapsed += delta * speedRef.current;
+      const wave = (Math.sin(elapsed * Math.PI) + 1) / 2;
+      const [from, to] = exerciseKeyframes(exerciseIdRef.current);
+      applyPose(rig, interpolatePose(from, to, wave));
+      controls.update();
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      controls.dispose();
+      renderer.dispose();
+      renderer.domElement.remove();
+      scene.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          object.geometry.dispose();
+          const materials = Array.isArray(object.material)
+            ? object.material
+            : [object.material];
+          materials.forEach((item) => item.dispose());
+        }
+      });
+      rigRef.current = null;
+    };
+  }, []);
+
+  return (
+    <section className="mannequin-section" id="exercise-demo">
+      <div className="mannequin-copy">
+        <p className="eyebrow">INTERACTIVE 3D MOVEMENT GUIDE</p>
+        <h2>
+          See the motion before you <em>perform it.</em>
+        </h2>
+        <p>
+          The same articulated mannequin demonstrates every protocol. Drag to
+          rotate, scroll to zoom, and slow the movement down before recording.
+        </p>
+        <div className="demo-protocol">
+          <span>NOW SHOWING</span>
+          <strong>{exercise.name}</strong>
+          <p>{exercise.cue}</p>
+        </div>
+        <div className="mannequin-controls">
+          <button
+            type="button"
+            onClick={() => setPlaying((current) => !current)}
+          >
+            {playing ? "Pause animation" : "Play animation"}
+          </button>
+          <button
+            type="button"
+            className={slow ? "active" : ""}
+            onClick={() => setSlow((current) => !current)}
+          >
+            {slow ? "Slow speed" : "Normal speed"}
+          </button>
+        </div>
+        <small>
+          Visual guide only. Follow the range, support and dosage prescribed by
+          a physiotherapist, and stop if you feel pain.
+        </small>
+      </div>
+      <div className="mannequin-stage">
+        <div ref={hostRef} className="mannequin-canvas" />
+        <div className="model-badge">
+          <span className="privacy-dot" /> Reusable articulated model
+        </div>
+        <div className="drag-hint">DRAG TO ROTATE · SCROLL TO ZOOM</div>
+      </div>
+    </section>
+  );
+}

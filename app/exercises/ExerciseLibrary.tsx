@@ -98,7 +98,7 @@ export function ExerciseLibrary() {
             <blockquote>“{exercise.cue}”</blockquote>
             <Link
               className="card-action"
-              href={`/?exercise=${exercise.id}`}
+              href={`/?exercise=${exercise.id}#exercise-demo`}
             >
               Open video assessor <span>→</span>
             </Link>

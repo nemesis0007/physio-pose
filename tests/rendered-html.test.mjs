@@ -38,6 +38,9 @@ test("server-renders the video assessment product", async () => {
   assert.match(html, /Videos up to 250 MB/);
   assert.match(html, /Chair sit-to-stand/);
   assert.match(html, /heuristic scoring available for every protocol/i);
+  assert.match(html, /INTERACTIVE 3D MOVEMENT GUIDE/);
+  assert.match(html, /Drag to rotate/);
+  assert.match(html, /Pause animation/);
 });
 
 test("server-renders the searchable exercise library", async () => {
@@ -66,10 +69,10 @@ test("server-renders the model card and safety limitations", async () => {
 });
 
 test("defines a scoring profile for every exercise", async () => {
-  const source = await readFile(
-    new URL("../app/exercise-data.ts", import.meta.url),
-    "utf8",
-  );
+  const [source, mannequin] = await Promise.all([
+    readFile(new URL("../app/exercise-data.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/ExerciseMannequin.tsx", import.meta.url), "utf8"),
+  ]);
   const librarySection = source.split("export const EXERCISES")[0];
   const profileSection = source.split(
     "export const SCORING_PROFILES",
@@ -85,6 +88,11 @@ test("defines a scoring profile for every exercise", async () => {
       profileSection,
       new RegExp(`(?:["']${escaped}["']|\\b${escaped}\\b)\\s*:`),
       `missing scoring profile for ${exerciseId}`,
+    );
+    assert.match(
+      mannequin,
+      new RegExp(`case\\s+["']${escaped}["']\\s*:`),
+      `missing 3D animation for ${exerciseId}`,
     );
   }
 });

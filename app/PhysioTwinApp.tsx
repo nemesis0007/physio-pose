@@ -6,6 +6,7 @@ import {
   PoseLandmarker,
   type NormalizedLandmark,
 } from "@mediapipe/tasks-vision";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   EXERCISES,
@@ -23,6 +24,10 @@ import {
   type RepPhase,
   type RepTracker,
 } from "./movement";
+
+const ExerciseMannequin = dynamic(() =>
+  import("./ExerciseMannequin").then((module) => module.ExerciseMannequin),
+);
 
 type SessionStatus =
   | "idle"
@@ -652,6 +657,8 @@ export function PhysioTwinApp() {
           </strong>
         </div>
       </section>
+
+      <ExerciseMannequin exercise={selectedExercise} />
 
       <section className="demo-band" aria-labelledby="demo-title">
         <div>
