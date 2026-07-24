@@ -154,13 +154,17 @@ export function PhysioTwinApp() {
     "Start the camera, choose an exercise video or use the backup demo.",
   );
   const [reps, setReps] = useState<LoggedRep[]>([]);
-  const [selectedExerciseId, setSelectedExerciseId] = useState(() => {
-    if (typeof window === "undefined") return "chair-sit-to-stand";
+  const [selectedExerciseId, setSelectedExerciseId] = useState(
+    "chair-sit-to-stand",
+  );
+
+  useEffect(() => {
     const query = new URLSearchParams(window.location.search).get("exercise");
-    return query && EXERCISES.some((exercise) => exercise.id === query)
-      ? query
-      : "chair-sit-to-stand";
-  });
+    if (query && EXERCISES.some((exercise) => exercise.id === query)) {
+      const timer = window.setTimeout(() => setSelectedExerciseId(query), 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, []);
 
   const selectedExercise =
     EXERCISES.find((exercise) => exercise.id === selectedExerciseId) ??

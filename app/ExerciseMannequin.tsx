@@ -96,6 +96,25 @@ function interpolatePose(from: Pose, to: Pose, progress: number): Pose {
   return result;
 }
 
+function applyCameraPreset(
+  exerciseId: string,
+  camera: THREE.PerspectiveCamera,
+  controls: OrbitControls,
+) {
+  if (exerciseId === "push-up") {
+    camera.position.set(4.9, 1.65, 0.15);
+    controls.target.set(0, 0.72, 0);
+  } else if (exerciseId === "pull-up") {
+    camera.position.set(4.7, 2.55, 5.6);
+    controls.target.set(0, 1.65, 0);
+  } else {
+    camera.position.set(3.8, 2.4, 5.4);
+    controls.target.set(0, 1.2, 0);
+  }
+  camera.lookAt(controls.target);
+  controls.update();
+}
+
 const FLOOR_IDS = new Set([
   "heel-slide",
   "straight-leg-raise",
@@ -276,35 +295,33 @@ function exerciseKeyframes(exerciseId: string): [Pose, Pose] {
     case "push-up":
       return [
         pose({
-          rootZ: -90,
-          rootY: -0.55,
-          leftShoulderZ: -72,
-          rightShoulderZ: -72,
-          leftElbowZ: 8,
-          rightElbowZ: 8,
+          rootX: 90,
+          rootY: -0.52,
+          leftShoulderX: -88,
+          rightShoulderX: -88,
         }),
         pose({
-          rootZ: -90,
-          rootY: -0.78,
-          leftShoulderZ: -62,
-          rightShoulderZ: -62,
-          leftElbowZ: 92,
-          rightElbowZ: 92,
+          rootX: 90,
+          rootY: -0.69,
+          leftShoulderX: -56,
+          rightShoulderX: -56,
+          leftElbowX: -102,
+          rightElbowX: -102,
         }),
       ];
     case "pull-up":
       return [
         pose({
-          rootY: 0.18,
-          leftShoulderZ: 170,
-          rightShoulderZ: -170,
+          rootY: 0.16,
+          leftShoulderZ: -150,
+          rightShoulderZ: 150,
         }),
         pose({
-          rootY: 0.62,
-          leftShoulderZ: 150,
-          rightShoulderZ: -150,
-          leftElbowZ: -98,
-          rightElbowZ: 98,
+          rootY: 0.6,
+          leftShoulderZ: -145,
+          rightShoulderZ: 145,
+          leftElbowZ: 55,
+          rightElbowZ: -55,
         }),
       ];
     case "pelvic-tilt":
@@ -611,7 +628,7 @@ function createRig(scene: THREE.Scene): Rig {
   scene.add(wall);
 
   const mat = new THREE.Mesh(
-    new THREE.BoxGeometry(3.4, 0.05, 1.5),
+    new THREE.BoxGeometry(3.4, 0.05, 3.6),
     material(0x68e3d2),
   );
   mat.position.y = 0.025;
@@ -719,6 +736,8 @@ function applyPose(rig: Rig, value: Pose) {
 export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rigRef = useRef<Rig | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const controlsRef = useRef<OrbitControls | null>(null);
   const exerciseIdRef = useRef(exercise.id);
   const playingRef = useRef(true);
   const speedRef = useRef(0.65);
@@ -734,6 +753,13 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
       rig.wall.visible = exercise.id === "wall-slide";
       rig.mat.visible = FLOOR_IDS.has(exercise.id);
       rig.bar.visible = exercise.id === "pull-up";
+    }
+    if (cameraRef.current && controlsRef.current) {
+      applyCameraPreset(
+        exercise.id,
+        cameraRef.current,
+        controlsRef.current,
+      );
     }
   }, [exercise.id]);
 
@@ -767,12 +793,14 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
     host.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(0, 1.2, 0);
+    cameraRef.current = camera;
+    controlsRef.current = controls;
     controls.enableDamping = true;
     controls.enablePan = false;
     controls.minDistance = 3.5;
     controls.maxDistance = 8;
     controls.maxPolarAngle = Math.PI / 2.02;
+    applyCameraPreset(exerciseIdRef.current, camera, controls);
 
     scene.add(new THREE.HemisphereLight(0xd9fffa, 0x102b3b, 2.2));
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.8);
@@ -847,6 +875,8 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
         }
       });
       rigRef.current = null;
+      cameraRef.current = null;
+      controlsRef.current = null;
     };
   }, []);
 
