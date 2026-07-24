@@ -10,12 +10,12 @@ const PROCESS = [
   {
     step: "02",
     title: "Estimate pose",
-    body: "MediaPipe Pose Landmarker Lite locates 33 body landmarks. WebGL/GPU is attempted first with a CPU fallback.",
+    body: "MediaPipe Pose Landmarker Full locates 33 body landmarks. WebGL/GPU is attempted first with a CPU fallback.",
   },
   {
     step: "03",
     title: "Measure",
-    body: "Plain geometry converts landmarks into knee angle, trunk lean and landmark confidence for the clearest visible body side.",
+    body: "Full-body framing gates and temporal smoothing stabilize the landmarks before geometry converts them into joint and compensation measures.",
   },
   {
     step: "04",
@@ -82,19 +82,19 @@ export default function HowItWorksPage() {
             </div>
             <div className="model-row">
               <strong>Pose estimation</strong>
-              <span>MediaPipe Pose Landmarker Lite, float16 task model</span>
+              <span>MediaPipe Pose Landmarker Full, float16 task model</span>
               <span>No — pretrained</span>
               <span>Returns 33 body landmarks from each video frame</span>
             </div>
             <div className="model-row">
               <strong>Movement metrics</strong>
-              <span>Vector geometry in TypeScript</span>
+              <span>Frame validation, temporal smoothing and vector geometry</span>
               <span>No ML</span>
-              <span>Computes knee angle, trunk lean and confidence</span>
+              <span>Rejects unstable frames and computes joint measures</span>
             </div>
             <div className="model-row">
               <strong>Rep detection</strong>
-              <span>Finite-state machine</span>
+              <span>Finite-state machine with three-frame confirmation</span>
               <span>No ML</span>
               <span>Segments repetitions or timed stability holds</span>
             </div>

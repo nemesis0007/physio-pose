@@ -41,6 +41,8 @@ test("server-renders the video assessment product", async () => {
   assert.match(html, /INTERACTIVE 3D MOVEMENT GUIDE/);
   assert.match(html, /Drag to rotate/);
   assert.match(html, /Pause animation/);
+  assert.match(html, /Download session report/);
+  assert.match(html, /gate ≥/);
 });
 
 test("server-renders the searchable exercise library", async () => {
@@ -60,7 +62,8 @@ test("server-renders the model card and safety limitations", async () => {
   assert.equal(response.status, 200);
 
   const html = await response.text();
-  assert.match(html, /MediaPipe Pose Landmarker Lite/);
+  assert.match(html, /MediaPipe Pose Landmarker Full/);
+  assert.match(html, /three-frame confirmation/);
   assert.match(html, /Finite-state machine/);
   assert.match(html, /24 transparent hackathon rule profiles/);
   assert.match(html, /0–100 heuristic score/);

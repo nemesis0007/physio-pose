@@ -536,16 +536,16 @@ function createRig(scene: THREE.Scene): Rig {
     new THREE.BoxGeometry(0.9, 0.12, 0.9),
     material(0xf7c873),
   );
-  seat.position.set(0, 0.68, 0.45);
+  seat.position.set(0, 0.68, -0.45);
   chair.add(seat);
   const back = new THREE.Mesh(
     new THREE.BoxGeometry(0.9, 0.85, 0.12),
     material(0xf7c873),
   );
-  back.position.set(0, 1.08, 0.84);
+  back.position.set(0, 1.08, -0.84);
   chair.add(back);
   for (const x of [-0.36, 0.36]) {
-    for (const z of [0.12, 0.76]) {
+    for (const z of [-0.12, -0.76]) {
       const leg = new THREE.Mesh(
         new THREE.CylinderGeometry(0.045, 0.055, 0.68, 12),
         material(0x9a6f31),

@@ -35,6 +35,8 @@ export type RepTracker = {
   startedAt: number;
   holdStartedAt: number | null;
   cooldownUntil: number;
+  pendingTransition: "start" | "target" | "return" | "hold" | null;
+  pendingFrames: number;
 };
 
 export type RepDecision = {
@@ -70,7 +72,9 @@ const INDEX = {
   rightFoot: 32,
 } as const;
 
-const REQUIRED_CONFIDENCE = 0.55;
+export const REQUIRED_CONFIDENCE = 0.65;
+const REQUIRED_TRANSITION_FRAMES = 3;
+const CORE_LANDMARKS = [11, 12, 23, 24, 25, 26, 27, 28] as const;
 
 function visibility(point: NormalizedLandmark) {
   return point.visibility ?? 1;
@@ -78,6 +82,50 @@ function visibility(point: NormalizedLandmark) {
 
 function average(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+export function validatePoseFrame(landmarks: NormalizedLandmark[]) {
+  if (landmarks.length < 33) {
+    return { valid: false, reason: "No complete pose was found." };
+  }
+
+  const core = CORE_LANDMARKS.map((index) => landmarks[index]);
+  const visibleCore = core.filter((point) => visibility(point) >= 0.6);
+  if (visibleCore.length < 6) {
+    return {
+      valid: false,
+      reason: "Keep both shoulders, hips, knees and ankles visible.",
+    };
+  }
+
+  const inFrame = visibleCore.filter(
+    (point) =>
+      point.x >= 0.015 &&
+      point.x <= 0.985 &&
+      point.y >= 0.015 &&
+      point.y <= 0.985,
+  );
+  if (inFrame.length < 6) {
+    return {
+      valid: false,
+      reason: "Step back so the full movement stays inside the frame.",
+    };
+  }
+
+  const xValues = visibleCore.map((point) => point.x);
+  const yValues = visibleCore.map((point) => point.y);
+  const poseSpan = Math.max(
+    Math.max(...xValues) - Math.min(...xValues),
+    Math.max(...yValues) - Math.min(...yValues),
+  );
+  if (poseSpan < 0.3) {
+    return {
+      valid: false,
+      reason: "Move closer so the body is large enough to measure.",
+    };
+  }
+
+  return { valid: true, reason: "" };
 }
 
 function distance(a: NormalizedLandmark, b: NormalizedLandmark) {
@@ -234,7 +282,30 @@ export function initialRepTracker(): RepTracker {
     startedAt: 0,
     holdStartedAt: null,
     cooldownUntil: 0,
+    pendingTransition: null,
+    pendingFrames: 0,
   };
+}
+
+function confirmTransition(
+  tracker: RepTracker,
+  transition: NonNullable<RepTracker["pendingTransition"]>,
+) {
+  const pendingFrames =
+    tracker.pendingTransition === transition ? tracker.pendingFrames + 1 : 1;
+  return {
+    confirmed: pendingFrames >= REQUIRED_TRANSITION_FRAMES,
+    tracker: {
+      ...tracker,
+      pendingTransition: transition,
+      pendingFrames,
+    },
+  };
+}
+
+function clearTransition(tracker: RepTracker) {
+  if (!tracker.pendingTransition && tracker.pendingFrames === 0) return tracker;
+  return { ...tracker, pendingTransition: null, pendingFrames: 0 };
 }
 
 function hasStarted(value: number, profile: ScoringProfile) {
@@ -337,9 +408,26 @@ export function advanceProtocol(
       };
     }
 
+    if (current.holdStartedAt === null) {
+      const confirmation = confirmTransition(current, "hold");
+      if (!confirmation.confirmed) {
+        return {
+          tracker: {
+            ...confirmation.tracker,
+            phase: "holding",
+            extremeValue: value,
+            maxCompensation: Math.max(
+              current.maxCompensation,
+              compensation,
+            ),
+          },
+        };
+      }
+    }
+
     const holdStartedAt = current.holdStartedAt ?? now;
     const tracker: RepTracker = {
-      ...current,
+      ...clearTransition(current),
       phase: "holding",
       extremeValue: value,
       maxCompensation: Math.max(current.maxCompensation, compensation),
@@ -363,9 +451,13 @@ export function advanceProtocol(
   }
 
   if (current.phase === "ready" && hasStarted(value, profile)) {
+    const confirmation = confirmTransition(current, "start");
+    if (!confirmation.confirmed) {
+      return { tracker: confirmation.tracker };
+    }
     return {
       tracker: {
-        ...current,
+        ...clearTransition(current),
         phase: "moving",
         extremeValue: value,
         maxCompensation: compensation,
@@ -374,7 +466,9 @@ export function advanceProtocol(
     };
   }
 
-  if (current.phase === "ready") return { tracker: current };
+  if (current.phase === "ready") {
+    return { tracker: clearTransition(current) };
+  }
 
   const tracker: RepTracker = {
     ...current,
@@ -386,11 +480,29 @@ export function advanceProtocol(
     current.phase === "moving" &&
     hasReachedTarget(value, profile)
   ) {
-    return { tracker: { ...tracker, phase: "target" } };
+    const confirmation = confirmTransition(tracker, "target");
+    if (!confirmation.confirmed) {
+      return { tracker: confirmation.tracker };
+    }
+    return {
+      tracker: {
+        ...clearTransition(confirmation.tracker),
+        phase: "target",
+      },
+    };
   }
 
   if (current.phase === "target" && hasReturned(value, profile)) {
-    return { tracker: { ...tracker, phase: "returning" } };
+    const confirmation = confirmTransition(tracker, "return");
+    if (!confirmation.confirmed) {
+      return { tracker: confirmation.tracker };
+    }
+    return {
+      tracker: {
+        ...clearTransition(confirmation.tracker),
+        phase: "returning",
+      },
+    };
   }
 
   if (current.phase === "returning") {
@@ -411,5 +523,5 @@ export function advanceProtocol(
     return { tracker: initialRepTracker() };
   }
 
-  return { tracker };
+  return { tracker: clearTransition(tracker) };
 }

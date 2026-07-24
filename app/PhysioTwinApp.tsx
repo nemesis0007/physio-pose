@@ -19,6 +19,8 @@ import {
   getPoseMetrics,
   initialRepTracker,
   metricValue,
+  REQUIRED_CONFIDENCE,
+  validatePoseFrame,
   type PoseMetrics,
   type RepDecision,
   type RepPhase,
@@ -43,6 +45,7 @@ type SourceMode = "camera" | "video" | null;
 type LoggedRep = RepDecision & {
   id: number;
   time: string;
+  recordedAt: string;
 };
 
 const STATUS_COPY: Record<SessionStatus, string> = {
@@ -64,6 +67,57 @@ const PHASE_COPY: Record<RepPhase, string> = {
 };
 
 const MAX_VIDEO_BYTES = 250 * 1024 * 1024;
+const SMOOTHING_ALPHA = 0.32;
+
+function interpolate(previous: number, current: number) {
+  return previous + (current - previous) * SMOOTHING_ALPHA;
+}
+
+function smoothMetrics(
+  previous: PoseMetrics | null,
+  current: PoseMetrics,
+): PoseMetrics {
+  if (!previous || previous.side !== current.side) return current;
+  return {
+    kneeAngle: interpolate(previous.kneeAngle, current.kneeAngle),
+    kneeBend: interpolate(previous.kneeBend, current.kneeBend),
+    hipAngle: interpolate(previous.hipAngle, current.hipAngle),
+    shoulderAngle: interpolate(
+      previous.shoulderAngle,
+      current.shoulderAngle,
+    ),
+    elbowAngle: interpolate(previous.elbowAngle, current.elbowAngle),
+    elbowBend: interpolate(previous.elbowBend, current.elbowBend),
+    ankleAngle: interpolate(previous.ankleAngle, current.ankleAngle),
+    trunkLean: interpolate(previous.trunkLean, current.trunkLean),
+    pelvisTilt: interpolate(previous.pelvisTilt, current.pelvisTilt),
+    wristSpan: interpolate(previous.wristSpan, current.wristSpan),
+    kneeSpan: interpolate(previous.kneeSpan, current.kneeSpan),
+    ankleSpan: interpolate(previous.ankleSpan, current.ankleSpan),
+    heelLift: interpolate(previous.heelLift, current.heelLift),
+    reachSpan: interpolate(previous.reachSpan, current.reachSpan),
+    singleLegLift: interpolate(
+      previous.singleLegLift,
+      current.singleLegLift,
+    ),
+    confidence: current.confidence,
+    side: current.side,
+  };
+}
+
+function escapeReportText(value: string) {
+  return value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;",
+      })[character] ?? character,
+  );
+}
 
 function formatMetric(
   value: number | undefined,
@@ -87,6 +141,10 @@ export function PhysioTwinApp() {
   const lastUiUpdateRef = useRef(0);
   const trackerRef = useRef<RepTracker>(initialRepTracker());
   const drawingRef = useRef<DrawingUtils | null>(null);
+  const smoothedMetricsRef = useRef<PoseMetrics | null>(null);
+  const lastRawMetricsRef = useRef<PoseMetrics | null>(null);
+  const stableFrameCountRef = useRef(0);
+  const sessionStartedAtRef = useRef(new Date());
 
   const [status, setStatus] = useState<SessionStatus>("idle");
   const [sourceMode, setSourceMode] = useState<SourceMode>(null);
@@ -123,6 +181,7 @@ export function PhysioTwinApp() {
         {
           ...decision,
           id: current.length + 1,
+          recordedAt: new Date().toISOString(),
           time: new Date().toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
@@ -172,16 +231,67 @@ export function PhysioTwinApp() {
 
   const analyzeLandmarks = useCallback(
     (landmarks: NormalizedLandmark[]) => {
-      const nextMetrics = getPoseMetrics(landmarks);
-      if (!nextMetrics) return;
+      const frameCheck = validatePoseFrame(landmarks);
+      if (!frameCheck.valid) {
+        stableFrameCountRef.current = 0;
+        trackerRef.current = initialRepTracker();
+        setPhase("ready");
+        setStatus("reposition");
+        setMessage(frameCheck.reason);
+        return;
+      }
+
+      const rawMetrics = getPoseMetrics(landmarks);
+      if (!rawMetrics) return;
+
+      const previousRaw = lastRawMetricsRef.current;
+      lastRawMetricsRef.current = rawMetrics;
+      if (previousRaw?.side === rawMetrics.side) {
+        const primaryJump = Math.abs(
+          metricValue(rawMetrics, scoringProfile.metric) -
+            metricValue(previousRaw, scoringProfile.metric),
+        );
+        const compensationJump = Math.abs(
+          metricValue(rawMetrics, scoringProfile.compensationMetric) -
+            metricValue(previousRaw, scoringProfile.compensationMetric),
+        );
+        const jumpLimit = scoringProfile.unit === "°" ? 32 : 45;
+        if (primaryJump > jumpLimit || compensationJump > jumpLimit) {
+          stableFrameCountRef.current = 0;
+          setStatus("reposition");
+          setMessage(
+            "Landmarks changed too quickly. Hold the camera steady and keep the full body visible.",
+          );
+          return;
+        }
+      }
+
+      const nextMetrics = smoothMetrics(
+        smoothedMetricsRef.current,
+        rawMetrics,
+      );
+      smoothedMetricsRef.current = nextMetrics;
 
       if (performance.now() - lastUiUpdateRef.current > 90) {
         setMetrics(nextMetrics);
         lastUiUpdateRef.current = performance.now();
       }
 
-      if (nextMetrics.confidence < 0.55) {
+      if (nextMetrics.confidence < REQUIRED_CONFIDENCE) {
+        stableFrameCountRef.current = 0;
+        trackerRef.current = initialRepTracker();
+        setPhase("ready");
         setStatus("reposition");
+        setMessage(
+          "Tracking confidence is low. Improve lighting and keep the full body visible.",
+        );
+        return;
+      }
+
+      stableFrameCountRef.current += 1;
+      if (stableFrameCountRef.current < 3) {
+        setStatus("reposition");
+        setMessage("Hold position briefly while tracking stabilizes.");
         return;
       }
 
@@ -258,14 +368,14 @@ export function PhysioTwinApp() {
     const vision = await FilesetResolver.forVisionTasks("/mediapipe/wasm");
     const options = {
       baseOptions: {
-        modelAssetPath: "/models/pose_landmarker_lite.task",
+        modelAssetPath: "/models/pose_landmarker_full.task",
         delegate: "GPU" as const,
       },
       runningMode: "VIDEO" as const,
       numPoses: 1,
-      minPoseDetectionConfidence: 0.55,
-      minPosePresenceConfidence: 0.55,
-      minTrackingConfidence: 0.55,
+      minPoseDetectionConfidence: 0.65,
+      minPosePresenceConfidence: 0.65,
+      minTrackingConfidence: 0.65,
     };
 
     try {
@@ -284,6 +394,10 @@ export function PhysioTwinApp() {
 
   const prepareSession = useCallback(() => {
     trackerRef.current = initialRepTracker();
+    smoothedMetricsRef.current = null;
+    lastRawMetricsRef.current = null;
+    stableFrameCountRef.current = 0;
+    sessionStartedAtRef.current = new Date();
     setPhase("ready");
     setMetrics(null);
     setReps([]);
@@ -443,6 +557,114 @@ export function PhysioTwinApp() {
     },
     [logDecision, scoringProfile],
   );
+
+  const downloadReport = useCallback(() => {
+    if (reps.length === 0) return;
+
+    const chronologicalReps = [...reps].reverse();
+    const accepted = chronologicalReps.filter((rep) => rep.accepted).length;
+    const acceptanceRate = Math.round(
+      (accepted / chronologicalReps.length) * 100,
+    );
+    const generatedAt = new Date();
+    const rows = chronologicalReps
+      .map(
+        (rep) => `
+          <tr>
+            <td>#${String(rep.id).padStart(2, "0")}</td>
+            <td class="${rep.accepted ? "pass" : "retry"}">
+              ${rep.accepted ? "ACCEPT" : "RETRY"}
+            </td>
+            <td>${rep.score}/100</td>
+            <td>
+              ${escapeReportText(rep.primaryLabel)}:
+              ${Math.round(rep.primaryValue)}${rep.primaryUnit}
+            </td>
+            <td>
+              ${escapeReportText(rep.compensationLabel)}:
+              ${Math.round(rep.compensationValue)}${rep.compensationUnit}
+            </td>
+            <td>${escapeReportText(rep.reason)}</td>
+            <td>${escapeReportText(rep.time)}</td>
+          </tr>`,
+      )
+      .join("");
+
+    const report = `<!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width" />
+          <title>PhysioTwin session report</title>
+          <style>
+            body { font: 14px/1.5 Arial, sans-serif; color: #102b3b; margin: 40px; }
+            header { border-bottom: 3px solid #0d7c78; padding-bottom: 18px; }
+            h1 { margin: 0; font-size: 30px; }
+            h2 { margin-top: 30px; font-size: 20px; }
+            .meta, .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 20px 0; }
+            .box { border: 1px solid #cbd8da; border-radius: 8px; padding: 14px; }
+            .box span { color: #65777f; display: block; font-size: 11px; text-transform: uppercase; }
+            .box strong { display: block; font-size: 22px; margin-top: 4px; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border-bottom: 1px solid #dfe7e8; padding: 10px 7px; text-align: left; vertical-align: top; }
+            th { background: #edf5f4; font-size: 11px; text-transform: uppercase; }
+            .pass { color: #08765b; font-weight: bold; }
+            .retry { color: #b4413a; font-weight: bold; }
+            .notice { background: #fff7e3; border-left: 4px solid #e1a82c; margin-top: 28px; padding: 14px; }
+            footer { color: #65777f; font-size: 11px; margin-top: 28px; }
+            @media print { body { margin: 18px; } }
+          </style>
+        </head>
+        <body>
+          <header>
+            <h1>PhysioTwin session report</h1>
+            <p>Explainable movement assessment · generated locally</p>
+          </header>
+          <section class="meta">
+            <div class="box"><span>Exercise</span><strong>${escapeReportText(selectedExercise.name)}</strong></div>
+            <div class="box"><span>Session started</span><strong>${escapeReportText(sessionStartedAtRef.current.toLocaleString())}</strong></div>
+            <div class="box"><span>Generated</span><strong>${escapeReportText(generatedAt.toLocaleString())}</strong></div>
+          </section>
+          <section class="summary">
+            <div class="box"><span>Accepted attempts</span><strong>${accepted}/${chronologicalReps.length}</strong></div>
+            <div class="box"><span>Acceptance rate</span><strong>${acceptanceRate}%</strong></div>
+            <div class="box"><span>Review flags</span><strong>${chronologicalReps.length - accepted}</strong></div>
+          </section>
+          <h2>Attempt details</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Rep</th><th>Decision</th><th>Score</th>
+                <th>Primary measure</th><th>Compensation</th>
+                <th>Reason</th><th>Time</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div class="notice">
+            <strong>Prototype notice:</strong> Scores use transparent hackathon
+            thresholds and must be reviewed by a qualified physiotherapist.
+            This report is not a diagnosis or medical-device output.
+          </div>
+          <footer>
+            Pose estimation: MediaPipe Pose Landmarker Full. Video frames were
+            processed locally and are not included in this report.
+          </footer>
+        </body>
+      </html>`;
+
+    const blob = new Blob([report], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `physiotwin-${selectedExercise.id}-${generatedAt
+      .toISOString()
+      .slice(0, 10)}.html`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }, [reps, selectedExercise.id, selectedExercise.name]);
 
   useEffect(() => {
     return () => {
@@ -625,7 +847,7 @@ export function PhysioTwinApp() {
               <strong>
                 {metrics ? metrics.confidence.toFixed(2) : "—"}
               </strong>
-              <small>gate ≥0.55</small>
+              <small>gate ≥{REQUIRED_CONFIDENCE.toFixed(2)}</small>
             </div>
           </div>
           <div className="coach-message" aria-live="polite">
@@ -685,10 +907,21 @@ export function PhysioTwinApp() {
             <p className="eyebrow">THERAPIST VIEW</p>
             <h2 id="summary-title">Exceptions, not hours of video.</h2>
           </div>
-          <p>
-            Raw frames stay on the device. This prototype records only the
-            measurements and decisions shown in this browser session.
-          </p>
+          <div className="summary-actions">
+            <p>
+              Raw frames stay on the device. This prototype records only the
+              measurements and decisions shown in this browser session.
+            </p>
+            <button
+              className="report-button"
+              type="button"
+              onClick={downloadReport}
+              disabled={reps.length === 0}
+            >
+              Download session report
+              <span>HTML · printable and locally generated</span>
+            </button>
+          </div>
         </div>
         <div className="summary-grid">
           <article>
