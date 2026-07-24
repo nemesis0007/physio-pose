@@ -100,7 +100,7 @@ export default function HowItWorksPage() {
             </div>
             <div className="model-row">
               <strong>Quality decision</strong>
-              <span>24 transparent hackathon rule profiles</span>
+              <span>26 transparent hackathon rule profiles</span>
               <span>No ML</span>
               <span>Produces a 0–100 heuristic score and traceable reason</span>
             </div>

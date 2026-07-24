@@ -50,9 +50,11 @@ test("server-renders the searchable exercise library", async () => {
   assert.equal(response.status, 200);
 
   const html = await response.text();
-  assert.match(html, /24 common rehabilitation movements/);
+  assert.match(html, /26 movement protocols/);
   assert.match(html, /Shoulder wall slide/);
   assert.match(html, /Supported single-leg balance/);
+  assert.match(html, /Push-up/);
+  assert.match(html, /Pull-up/);
   assert.match(html, /Heuristic scoring/);
   assert.match(html, /All protocols now have explainable demo scoring/);
 });
@@ -65,7 +67,7 @@ test("server-renders the model card and safety limitations", async () => {
   assert.match(html, /MediaPipe Pose Landmarker Full/);
   assert.match(html, /three-frame confirmation/);
   assert.match(html, /Finite-state machine/);
-  assert.match(html, /24 transparent hackathon rule profiles/);
+  assert.match(html, /26 transparent hackathon rule profiles/);
   assert.match(html, /0–100 heuristic score/);
   assert.match(html, /No LLM/);
   assert.match(html, /Prototype limitations/);
@@ -84,7 +86,7 @@ test("defines a scoring profile for every exercise", async () => {
     ...librarySection.matchAll(/\bid:\s*"([^"]+)"/g),
   ].map((match) => match[1]);
 
-  assert.equal(exerciseIds.length, 24);
+  assert.equal(exerciseIds.length, 26);
   for (const exerciseId of exerciseIds) {
     const escaped = exerciseId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     assert.match(

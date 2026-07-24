@@ -2,6 +2,7 @@ export type ExerciseCategory =
   | "Knee"
   | "Hip"
   | "Shoulder"
+  | "Strength"
   | "Spine & core"
   | "Ankle & foot"
   | "Balance";
@@ -208,6 +209,28 @@ const EXERCISE_LIBRARY: Exercise[] = [
     position: "Front view",
     focus: "Rotator cuff strength",
     cue: "Keep the elbow tucked against the side.",
+    automatedScoring: false,
+  },
+  {
+    id: "push-up",
+    name: "Push-up",
+    category: "Strength",
+    level: "Advanced",
+    equipment: "Mat; optional stable bench",
+    position: "Side view with the full body visible",
+    focus: "Elbow range and trunk stability",
+    cue: "Keep a straight line from shoulders to ankles and lower with control.",
+    automatedScoring: false,
+  },
+  {
+    id: "pull-up",
+    name: "Pull-up",
+    category: "Strength",
+    level: "Advanced",
+    equipment: "Secure overhead bar; optional assistance band",
+    position: "Front-oblique view with the full body visible",
+    focus: "Elbow flexion without lower-body momentum",
+    cue: "Start from a controlled hang and pull without swinging or kicking.",
     automatedScoring: false,
   },
   {
@@ -483,6 +506,18 @@ export const SCORING_PROFILES: Record<string, ScoringProfile> = {
     "Rotate outward through the demonstrated range.",
     "Keep both elbows tucked and softly bent.",
   ),
+  "push-up": rep(
+    "elbowBend", "Elbow bend", "Â°", "increase", 25, 70, 120, 20,
+    "70â€“120Â°", "pelvisTilt", "Pelvis rotation", "Â°", 20,
+    "Lower until the elbows reach the demonstrated range.",
+    "Keep the pelvis level and the body moving as one unit.",
+  ),
+  "pull-up": rep(
+    "elbowBend", "Elbow bend", "Â°", "increase", 25, 75, 135, 20,
+    "75â€“135Â°", "kneeBend", "Knee bend", "Â°", 40,
+    "Pull until the elbows reach the demonstrated range.",
+    "Keep the legs quiet and avoid kicking for momentum.",
+  ),
   "pelvic-tilt": rep(
     "hipAngle", "Lumbopelvic angle", "°", "increase", 105, 115, 150, 100,
     "115–150°", "pelvisTilt", "Pelvis rotation", "°", 45,
@@ -550,6 +585,7 @@ export const EXERCISE_CATEGORIES = [
   "Knee",
   "Hip",
   "Shoulder",
+  "Strength",
   "Spine & core",
   "Ankle & foot",
   "Balance",

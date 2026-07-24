@@ -12,9 +12,9 @@ export default function ExercisesPage() {
           One clear place for the <em>full programme.</em>
         </h1>
         <p>
-          Browse 24 common rehabilitation movements across knee, hip,
-          shoulder, spine, ankle and balance care. A therapist should select
-          the exercise, dose and safe range for each patient.
+          Browse 26 movement protocols across knee, hip, shoulder, strength,
+          spine, ankle and balance care. A therapist should select the
+          exercise, dose and safe range for each patient.
         </p>
       </section>
       <section className="content-page">

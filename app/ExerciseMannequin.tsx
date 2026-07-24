@@ -50,6 +50,7 @@ type Rig = {
   step: THREE.Mesh;
   wall: THREE.Mesh;
   mat: THREE.Mesh;
+  bar: THREE.Group;
 };
 
 const DEG = Math.PI / 180;
@@ -105,6 +106,7 @@ const FLOOR_IDS = new Set([
   "cat-cow",
   "bird-dog",
   "prone-press-up",
+  "push-up",
 ]);
 
 const CHAIR_IDS = new Set([
@@ -269,6 +271,40 @@ function exerciseKeyframes(exerciseId: string): [Pose, Pose] {
           rightElbowX: -78,
           leftElbowZ: 52,
           rightElbowZ: -52,
+        }),
+      ];
+    case "push-up":
+      return [
+        pose({
+          rootZ: -90,
+          rootY: -0.55,
+          leftShoulderZ: -72,
+          rightShoulderZ: -72,
+          leftElbowZ: 8,
+          rightElbowZ: 8,
+        }),
+        pose({
+          rootZ: -90,
+          rootY: -0.78,
+          leftShoulderZ: -62,
+          rightShoulderZ: -62,
+          leftElbowZ: 92,
+          rightElbowZ: 92,
+        }),
+      ];
+    case "pull-up":
+      return [
+        pose({
+          rootY: 0.18,
+          leftShoulderZ: 170,
+          rightShoulderZ: -170,
+        }),
+        pose({
+          rootY: 0.62,
+          leftShoulderZ: 150,
+          rightShoulderZ: -150,
+          leftElbowZ: -98,
+          rightElbowZ: 98,
         }),
       ];
     case "pelvic-tilt":
@@ -581,6 +617,24 @@ function createRig(scene: THREE.Scene): Rig {
   mat.position.y = 0.025;
   scene.add(mat);
 
+  const bar = new THREE.Group();
+  const crossbar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.055, 0.055, 2.8, 18),
+    material(0x9bb5bd, 0.4),
+  );
+  crossbar.rotation.z = Math.PI / 2;
+  crossbar.position.y = 3.2;
+  bar.add(crossbar);
+  for (const x of [-1.32, 1.32]) {
+    const post = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.045, 0.06, 3.2, 16),
+      material(0x526f79, 0.55),
+    );
+    post.position.set(x, 1.6, -0.18);
+    bar.add(post);
+  }
+  scene.add(bar);
+
   return {
     root,
     torso,
@@ -598,6 +652,7 @@ function createRig(scene: THREE.Scene): Rig {
     step,
     wall,
     mat,
+    bar,
   };
 }
 
@@ -678,6 +733,7 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
       rig.step.visible = exercise.id === "step-up";
       rig.wall.visible = exercise.id === "wall-slide";
       rig.mat.visible = FLOOR_IDS.has(exercise.id);
+      rig.bar.visible = exercise.id === "pull-up";
     }
   }, [exercise.id]);
 
@@ -748,6 +804,7 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
     rig.step.visible = exerciseIdRef.current === "step-up";
     rig.wall.visible = exerciseIdRef.current === "wall-slide";
     rig.mat.visible = FLOOR_IDS.has(exerciseIdRef.current);
+    rig.bar.visible = exerciseIdRef.current === "pull-up";
 
     const resize = () => {
       const { width, height } = host.getBoundingClientRect();
