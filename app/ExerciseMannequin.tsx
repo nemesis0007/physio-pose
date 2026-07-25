@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { Exercise } from "./exercise-data";
 
 type Pose = {
@@ -52,12 +51,6 @@ type Rig = {
   wall: THREE.Mesh;
   mat: THREE.Mesh;
   bar: THREE.Group;
-};
-
-type ImportedRig = {
-  pivot: THREE.Group;
-  bones: Record<string, THREE.Bone>;
-  base: Record<string, THREE.Quaternion>;
 };
 
 const DEG = Math.PI / 180;
@@ -109,11 +102,11 @@ function applyCameraPreset(
   controls: OrbitControls,
 ) {
   if (exerciseId === "push-up") {
-    camera.position.set(7.2, 1.75, 0.2);
-    controls.target.set(0, 0.42, 0);
+    camera.position.set(4.9, 1.65, 0.15);
+    controls.target.set(0, 0.72, 0);
   } else if (exerciseId === "pull-up") {
-    camera.position.set(4.9, 3.05, 5.9);
-    controls.target.set(0, 2.02, 0);
+    camera.position.set(4.7, 2.55, 5.6);
+    controls.target.set(0, 1.65, 0);
   } else {
     camera.position.set(3.8, 2.4, 5.4);
     controls.target.set(0, 1.2, 0);
@@ -303,13 +296,13 @@ function exerciseKeyframes(exerciseId: string): [Pose, Pose] {
       return [
         pose({
           rootX: 90,
-          rootY: -0.93,
+          rootY: -0.52,
           leftShoulderX: -88,
           rightShoulderX: -88,
         }),
         pose({
           rootX: 90,
-          rootY: -1.08,
+          rootY: -0.69,
           leftShoulderX: -56,
           rightShoulderX: -56,
           leftElbowX: -102,
@@ -654,7 +647,7 @@ function createRig(scene: THREE.Scene): Rig {
   scene.add(wall);
 
   const mat = new THREE.Mesh(
-    new THREE.BoxGeometry(1.35, 0.05, 3.35),
+    new THREE.BoxGeometry(3.4, 0.05, 3.6),
     material(0x68e3d2),
   );
   mat.position.y = 0.025;
@@ -759,134 +752,6 @@ function applyPose(rig: Rig, value: Pose) {
   );
 }
 
-function poseBone(
-  imported: ImportedRig,
-  boneName: string,
-  childName: string,
-  x: number,
-  z: number,
-) {
-  const bone = imported.bones[boneName];
-  const child = imported.bones[childName];
-  const base = imported.base[boneName];
-  if (!bone || !child || !base || !bone.parent) return;
-
-  const rest = child.position.clone().normalize().applyQuaternion(base);
-  const targetInBody = new THREE.Vector3(0, -1, 0).applyEuler(
-    new THREE.Euler(x * DEG, 0, z * DEG),
-  );
-  imported.pivot.updateMatrixWorld(true);
-  const bodyWorld = imported.pivot.getWorldQuaternion(new THREE.Quaternion());
-  const parentWorld = bone.parent.getWorldQuaternion(new THREE.Quaternion());
-  const target = targetInBody
-    .applyQuaternion(bodyWorld)
-    .applyQuaternion(parentWorld.invert())
-    .normalize();
-  const delta = new THREE.Quaternion().setFromUnitVectors(rest, target);
-  bone.quaternion.copy(delta).multiply(base);
-}
-
-function rotateBone(
-  imported: ImportedRig,
-  boneName: string,
-  x: number,
-  z: number,
-) {
-  const bone = imported.bones[boneName];
-  const base = imported.base[boneName];
-  if (!bone || !base) return;
-  const rotation = new THREE.Quaternion().setFromEuler(
-    new THREE.Euler(x * DEG, 0, z * DEG),
-  );
-  bone.quaternion.copy(base).multiply(rotation);
-}
-
-function applyImportedPose(
-  imported: ImportedRig,
-  value: Pose,
-  exerciseId: string,
-) {
-  const actionOffset =
-    exerciseId === "push-up" || exerciseId === "pull-up" ? 1.31 : 0;
-  imported.pivot.position.y = 0.03 + value.rootY + actionOffset;
-  imported.pivot.rotation.set(value.rootX * DEG, 0, value.rootZ * DEG);
-
-  rotateBone(imported, "Spine", value.torsoX, value.torsoZ);
-  poseBone(
-    imported,
-    "LeftArm",
-    "LeftForeArm",
-    value.leftShoulderX,
-    value.leftShoulderZ,
-  );
-  poseBone(
-    imported,
-    "RightArm",
-    "RightForeArm",
-    value.rightShoulderX,
-    value.rightShoulderZ,
-  );
-  const leftElbowBend =
-    exerciseId === "push-up"
-      ? 0
-      : value.leftElbowZ - value.leftElbowX;
-  const rightElbowBend =
-    exerciseId === "push-up"
-      ? 0
-      : value.rightElbowZ + value.rightElbowX;
-  rotateBone(
-    imported,
-    "LeftForeArm",
-    0,
-    leftElbowBend,
-  );
-  rotateBone(
-    imported,
-    "RightForeArm",
-    0,
-    rightElbowBend,
-  );
-  poseBone(
-    imported,
-    "LeftUpLeg",
-    "LeftLeg",
-    value.leftHipX,
-    value.leftHipZ,
-  );
-  poseBone(
-    imported,
-    "RightUpLeg",
-    "RightLeg",
-    value.rightHipX,
-    value.rightHipZ,
-  );
-  rotateBone(
-    imported,
-    "LeftLeg",
-    0,
-    value.leftKneeZ - value.leftKneeX,
-  );
-  rotateBone(
-    imported,
-    "RightLeg",
-    0,
-    value.rightKneeZ + value.rightKneeX,
-  );
-  rotateBone(
-    imported,
-    "LeftFoot",
-    0,
-    value.leftAnkleZ - value.leftAnkleX,
-  );
-  rotateBone(
-    imported,
-    "RightFoot",
-    0,
-    value.rightAnkleZ + value.rightAnkleX,
-  );
-
-}
-
 export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rigRef = useRef<Rig | null>(null);
@@ -982,8 +847,6 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
 
     const rig = createRig(scene);
     rigRef.current = rig;
-    let importedRig: ImportedRig | null = null;
-    let disposed = false;
     rig.chair.visible = CHAIR_IDS.has(exerciseIdRef.current);
     rig.step.visible = exerciseIdRef.current === "step-up";
     rig.wall.visible = exerciseIdRef.current === "wall-slide";
@@ -995,54 +858,6 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
         object.receiveShadow = true;
       }
     });
-
-    const loader = new GLTFLoader();
-    loader.load(
-      "/models/athletic-soldier.glb",
-      (gltf) => {
-        if (disposed) return;
-        const model = gltf.scene;
-        const bounds = new THREE.Box3().setFromObject(model);
-        const size = bounds.getSize(new THREE.Vector3());
-        const modelScale = 2.62 / Math.max(size.y, 0.1);
-        model.scale.setScalar(modelScale);
-        model.updateMatrixWorld(true);
-
-        const hips =
-          model.getObjectByName("mixamorig:Hips") ??
-          model.getObjectByName("mixamorigHips");
-        const hipsPosition = new THREE.Vector3();
-        hips?.getWorldPosition(hipsPosition);
-        model.position.sub(hipsPosition.divideScalar(modelScale));
-
-        const pivot = new THREE.Group();
-        pivot.position.y = 0.03;
-        pivot.add(model);
-        scene.add(pivot);
-
-        const bones: Record<string, THREE.Bone> = {};
-        const base: Record<string, THREE.Quaternion> = {};
-        model.traverse((object) => {
-          if ((object as THREE.Bone).isBone) {
-            const bone = object as THREE.Bone;
-            const name = bone.name.replace(/^mixamorig:?/, "");
-            bones[name] = bone;
-            base[name] = bone.quaternion.clone();
-          }
-          if ((object as THREE.Mesh).isMesh) {
-            const mesh = object as THREE.Mesh;
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-          }
-        });
-        importedRig = { pivot, bones, base };
-        rig.root.visible = false;
-      },
-      undefined,
-      () => {
-        rig.root.visible = true;
-      },
-    );
 
     const resize = () => {
       const { width, height } = host.getBoundingClientRect();
@@ -1063,18 +878,13 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
       if (playingRef.current) elapsed += delta * speedRef.current;
       const wave = (Math.sin(elapsed * Math.PI) + 1) / 2;
       const [from, to] = exerciseKeyframes(exerciseIdRef.current);
-      const currentPose = interpolatePose(from, to, wave);
-      applyPose(rig, currentPose);
-      if (importedRig) {
-        applyImportedPose(importedRig, currentPose, exerciseIdRef.current);
-      }
+      applyPose(rig, interpolatePose(from, to, wave));
       controls.update();
       renderer.render(scene, camera);
     };
     animate();
 
     return () => {
-      disposed = true;
       cancelAnimationFrame(frame);
       observer.disconnect();
       controls.dispose();
@@ -1103,8 +913,8 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
           See the motion before you <em>perform it.</em>
         </h2>
         <p>
-          A high-detail athletic human demonstrates every protocol. Drag to
-          rotate, scroll to zoom, and slow the movement before recording.
+          The same articulated mannequin demonstrates every protocol. Drag to
+          rotate, scroll to zoom, and slow the movement down before recording.
         </p>
         <div className="demo-protocol">
           <span>NOW SHOWING</span>
@@ -1134,7 +944,7 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
       <div className="mannequin-stage">
         <div ref={hostRef} className="mannequin-canvas" />
         <div className="model-badge">
-          <span className="privacy-dot" /> Licensed athletic human model
+          <span className="privacy-dot" /> Reusable articulated model
         </div>
         <div className="drag-hint">DRAG TO ROTATE · SCROLL TO ZOOM</div>
       </div>
