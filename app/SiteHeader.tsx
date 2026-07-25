@@ -14,6 +14,7 @@ export function SiteHeader() {
         <Link href="/">Assess</Link>
         <Link href="/exercises">Exercises</Link>
         <Link href="/how-it-works">How it works</Link>
+        <Link href="/profile">Profile</Link>
       </div>
       <div className="nav-meta">
         <span className="privacy-dot" /> Private by default

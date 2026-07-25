@@ -76,6 +76,16 @@ test("server-renders the model card and safety limitations", async () => {
   assert.match(html, /movement intelligence stack/i);
 });
 
+test("server-renders the profile login experience", async () => {
+  const response = await render("/profile");
+  assert.equal(response.status, 200);
+
+  const html = await response.text();
+  assert.match(html, /Keep every recovery day connected/);
+  assert.match(html, /Sign in with ChatGPT/);
+  assert.match(html, /PRIVATE PROGRESS PROFILE/);
+});
+
 test("defines a scoring profile for every exercise", async () => {
   const [source, mannequin] = await Promise.all([
     readFile(new URL("../app/exercise-data.ts", import.meta.url), "utf8"),

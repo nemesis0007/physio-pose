@@ -14,6 +14,7 @@ import {
 } from "./exercise-data";
 import { SiteFooter } from "./SiteFooter";
 import { SiteHeader } from "./SiteHeader";
+import { recordExerciseActivity } from "./profile-storage";
 import {
   advanceProtocol,
   getPoseMetrics,
@@ -171,7 +172,7 @@ function formatMetric(
   return value === undefined ? "—" : `${Math.round(value)}${unit}`;
 }
 
-export function PhysioTwinApp() {
+export function PhysioTwinApp({ profileId }: { profileId: string | null }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -291,6 +292,18 @@ export function PhysioTwinApp() {
         }
         return next;
       });
+      if (profileId) {
+        try {
+          recordExerciseActivity(profileId, {
+            exerciseId: selectedExercise.id,
+            exerciseName: selectedExercise.name,
+            accepted: decision.accepted,
+            score: decision.score,
+          });
+        } catch {
+          // A blocked browser store should never interrupt the assessment.
+        }
+      }
       setMessage(
         decision.accepted
           ? `Accepted — heuristic quality score ${decision.score}/100.`
@@ -298,7 +311,14 @@ export function PhysioTwinApp() {
       );
       speak(decision.cue);
     },
-    [metrics?.confidence, selectedExerciseId, speak],
+    [
+      metrics?.confidence,
+      profileId,
+      selectedExercise.id,
+      selectedExercise.name,
+      selectedExerciseId,
+      speak,
+    ],
   );
 
   const stopSource = useCallback(() => {
