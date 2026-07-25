@@ -302,13 +302,13 @@ function exerciseKeyframes(exerciseId: string): [Pose, Pose] {
     case "push-up":
       return [
         pose({
-          rootX: -90,
+          rootX: 90,
           rootY: -0.93,
           leftShoulderX: -88,
           rightShoulderX: -88,
         }),
         pose({
-          rootX: -90,
+          rootX: 90,
           rootY: -1.08,
           leftShoulderX: -56,
           rightShoulderX: -56,
@@ -769,14 +769,36 @@ function poseBone(
   const bone = imported.bones[boneName];
   const child = imported.bones[childName];
   const base = imported.base[boneName];
-  if (!bone || !child || !base) return;
+  if (!bone || !child || !base || !bone.parent) return;
 
   const rest = child.position.clone().normalize().applyQuaternion(base);
-  const target = new THREE.Vector3(0, -1, 0).applyEuler(
+  const targetInBody = new THREE.Vector3(0, -1, 0).applyEuler(
     new THREE.Euler(x * DEG, 0, z * DEG),
   );
+  imported.pivot.updateMatrixWorld(true);
+  const bodyWorld = imported.pivot.getWorldQuaternion(new THREE.Quaternion());
+  const parentWorld = bone.parent.getWorldQuaternion(new THREE.Quaternion());
+  const target = targetInBody
+    .applyQuaternion(bodyWorld)
+    .applyQuaternion(parentWorld.invert())
+    .normalize();
   const delta = new THREE.Quaternion().setFromUnitVectors(rest, target);
   bone.quaternion.copy(delta).multiply(base);
+}
+
+function rotateBone(
+  imported: ImportedRig,
+  boneName: string,
+  x: number,
+  z: number,
+) {
+  const bone = imported.bones[boneName];
+  const base = imported.base[boneName];
+  if (!bone || !base) return;
+  const rotation = new THREE.Quaternion().setFromEuler(
+    new THREE.Euler(x * DEG, 0, z * DEG),
+  );
+  bone.quaternion.copy(base).multiply(rotation);
 }
 
 function applyImportedPose(
@@ -789,7 +811,7 @@ function applyImportedPose(
   imported.pivot.position.y = 0.03 + value.rootY + actionOffset;
   imported.pivot.rotation.set(value.rootX * DEG, 0, value.rootZ * DEG);
 
-  poseBone(imported, "Spine", "Spine1", value.torsoX, value.torsoZ);
+  rotateBone(imported, "Spine", value.torsoX, value.torsoZ);
   poseBone(
     imported,
     "LeftArm",
@@ -804,19 +826,25 @@ function applyImportedPose(
     value.rightShoulderX,
     value.rightShoulderZ,
   );
-  poseBone(
+  const leftElbowBend =
+    exerciseId === "push-up"
+      ? 0
+      : value.leftElbowZ - value.leftElbowX;
+  const rightElbowBend =
+    exerciseId === "push-up"
+      ? 0
+      : value.rightElbowZ + value.rightElbowX;
+  rotateBone(
     imported,
     "LeftForeArm",
-    "LeftHand",
-    value.leftElbowX,
-    value.leftElbowZ,
+    0,
+    leftElbowBend,
   );
-  poseBone(
+  rotateBone(
     imported,
     "RightForeArm",
-    "RightHand",
-    value.rightElbowX,
-    value.rightElbowZ,
+    0,
+    rightElbowBend,
   );
   poseBone(
     imported,
@@ -832,33 +860,29 @@ function applyImportedPose(
     value.rightHipX,
     value.rightHipZ,
   );
-  poseBone(
+  rotateBone(
     imported,
     "LeftLeg",
-    "LeftFoot",
-    value.leftKneeX,
-    value.leftKneeZ,
+    0,
+    value.leftKneeZ - value.leftKneeX,
   );
-  poseBone(
+  rotateBone(
     imported,
     "RightLeg",
-    "RightFoot",
-    value.rightKneeX,
-    value.rightKneeZ,
+    0,
+    value.rightKneeZ + value.rightKneeX,
   );
-  poseBone(
+  rotateBone(
     imported,
     "LeftFoot",
-    "LeftToeBase",
-    value.leftAnkleX,
-    value.leftAnkleZ,
+    0,
+    value.leftAnkleZ - value.leftAnkleX,
   );
-  poseBone(
+  rotateBone(
     imported,
     "RightFoot",
-    "RightToeBase",
-    value.rightAnkleX,
-    value.rightAnkleZ,
+    0,
+    value.rightAnkleZ + value.rightAnkleX,
   );
 
 }
@@ -984,7 +1008,9 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
         model.scale.setScalar(modelScale);
         model.updateMatrixWorld(true);
 
-        const hips = model.getObjectByName("mixamorig:Hips");
+        const hips =
+          model.getObjectByName("mixamorig:Hips") ??
+          model.getObjectByName("mixamorigHips");
         const hipsPosition = new THREE.Vector3();
         hips?.getWorldPosition(hipsPosition);
         model.position.sub(hipsPosition.divideScalar(modelScale));
@@ -999,7 +1025,7 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
         model.traverse((object) => {
           if ((object as THREE.Bone).isBone) {
             const bone = object as THREE.Bone;
-            const name = bone.name.replace("mixamorig:", "");
+            const name = bone.name.replace(/^mixamorig:?/, "");
             bones[name] = bone;
             base[name] = bone.quaternion.clone();
           }
