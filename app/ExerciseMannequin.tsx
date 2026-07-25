@@ -795,8 +795,8 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
     if (!host) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf2f5fa);
-    scene.fog = new THREE.Fog(0xf2f5fa, 7, 12);
+    scene.background = new THREE.Color(0x0b0d12);
+    scene.fog = new THREE.Fog(0x0b0d12, 7, 12);
 
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 50);
     camera.position.set(3.8, 2.4, 5.4);
@@ -821,7 +821,7 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
     controls.maxPolarAngle = Math.PI / 2.02;
     applyCameraPreset(exerciseIdRef.current, camera, controls);
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x9babbd, 2.45));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x15213a, 2.35));
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.8);
     keyLight.position.set(3, 6, 4);
     keyLight.castShadow = true;
@@ -833,7 +833,7 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
     const floor = new THREE.Mesh(
       new THREE.CircleGeometry(4.2, 64),
       new THREE.MeshStandardMaterial({
-        color: 0xe4e9f1,
+        color: 0x111722,
         roughness: 0.9,
       }),
     );
@@ -841,7 +841,7 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
     floor.receiveShadow = true;
     scene.add(floor);
 
-    const grid = new THREE.GridHelper(7, 14, 0xb8c4d3, 0xd5dce6);
+    const grid = new THREE.GridHelper(7, 14, 0x335184, 0x172238);
     grid.position.y = 0.005;
     scene.add(grid);
 

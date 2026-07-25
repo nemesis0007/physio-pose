@@ -993,6 +993,30 @@ export function PhysioTwinApp() {
                 ? "Camera check"
                 : `${insight.cameraQuality}% capture quality`}
             </div>
+            <div className="live-rep-hud" aria-live="polite">
+              <div>
+                <span>REPS</span>
+                <strong>{reps.length}</strong>
+              </div>
+              <div>
+                <span>LAST RESULT</span>
+                <strong
+                  className={
+                    reps[0]
+                      ? reps[0].accepted
+                        ? "hud-pass"
+                        : "hud-retry"
+                      : ""
+                  }
+                >
+                  {reps[0]
+                    ? reps[0].accepted
+                      ? "Counted"
+                      : "Retry"
+                    : "Waiting"}
+                </strong>
+              </div>
+            </div>
           </div>
           <div className="metric-strip metric-strip-four">
             <div>
@@ -1052,6 +1076,38 @@ export function PhysioTwinApp() {
             <span>COACH</span>
             <p>{message}</p>
           </div>
+        </div>
+      </section>
+
+      <section className="live-results-dock" aria-label="Live rep results">
+        <div className="dock-heading">
+          <span className={`status-light ${status}`} />
+          <div>
+            <small>LIVE SESSION</small>
+            <strong>
+              {reps[0]
+                ? reps[0].accepted
+                  ? `Rep ${reps[0].id} counted`
+                  : `Rep ${reps[0].id} needs another try`
+                : "Your rep result will appear here"}
+            </strong>
+          </div>
+        </div>
+        <div className="dock-stat">
+          <small>Total reps</small>
+          <strong>{reps.length}</strong>
+        </div>
+        <div className="dock-stat">
+          <small>Accepted</small>
+          <strong>{acceptedCount}</strong>
+        </div>
+        <div className="dock-stat">
+          <small>Last score</small>
+          <strong>{reps[0]?.score ?? "—"}</strong>
+        </div>
+        <div className="dock-cue">
+          <small>Latest cue</small>
+          <p>{reps[0]?.cue ?? message}</p>
         </div>
       </section>
 
