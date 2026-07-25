@@ -10,15 +10,15 @@ import {
 
 export function ProfileDashboard({
   displayName,
-  email,
+  profileId,
 }: {
   displayName: string;
-  email: string;
+  profileId: string;
 }) {
   const [history, setHistory] = useState<ExerciseHistoryEntry[]>([]);
 
   useEffect(() => {
-    const refresh = () => setHistory(readExerciseHistory(email));
+    const refresh = () => setHistory(readExerciseHistory(profileId));
     refresh();
     window.addEventListener(PROFILE_HISTORY_EVENT, refresh);
     window.addEventListener("storage", refresh);
@@ -26,7 +26,7 @@ export function ProfileDashboard({
       window.removeEventListener(PROFILE_HISTORY_EVENT, refresh);
       window.removeEventListener("storage", refresh);
     };
-  }, [email]);
+  }, [profileId]);
 
   const totals = useMemo(
     () => ({
@@ -52,6 +52,32 @@ export function ProfileDashboard({
       ),
     [history],
   );
+  const activityByDate = useMemo(
+    () =>
+      new Map(
+        history.map((entry) => [
+          entry.date,
+          (history
+            .filter((candidate) => candidate.date === entry.date)
+            .reduce((sum, candidate) => sum + candidate.totalReps, 0)),
+        ]),
+      ),
+    [history],
+  );
+  const contributionDays = useMemo(() => {
+    const today = new Date();
+    const day = today.getDay();
+    const end = new Date(today);
+    end.setDate(today.getDate() + (6 - day));
+    return Array.from({ length: 371 }, (_, index) => {
+      const date = new Date(end);
+      date.setDate(end.getDate() - (370 - index));
+      const key = date.toISOString().slice(0, 10);
+      const reps = activityByDate.get(key) ?? 0;
+      const level = reps === 0 ? 0 : reps < 4 ? 1 : reps < 8 ? 2 : reps < 14 ? 3 : 4;
+      return { key, reps, level };
+    });
+  }, [activityByDate]);
 
   return (
     <>
@@ -62,7 +88,7 @@ export function ProfileDashboard({
         <div>
           <p className="eyebrow">YOUR PHYSIOTWIN PROFILE</p>
           <h1>{displayName}</h1>
-          <p>{email}</p>
+          <p>Local private profile</p>
         </div>
       </section>
 
@@ -74,6 +100,33 @@ export function ProfileDashboard({
       </section>
 
       <section className="history-section">
+        <div className="contribution-card">
+          <div className="contribution-heading">
+            <div>
+              <p className="eyebrow">RECOVERY CONSISTENCY</p>
+              <h2>{totals.reps} reps in the last year</h2>
+            </div>
+            <div className="contribution-legend">
+              <span>Less</span>
+              {[0, 1, 2, 3, 4].map((level) => (
+                <i className={`activity-level-${level}`} key={level} />
+              ))}
+              <span>More</span>
+            </div>
+          </div>
+          <div className="contribution-scroll">
+            <div className="contribution-map" aria-label="Daily exercise activity">
+              {contributionDays.map((day) => (
+                <span
+                  className={`activity-level-${day.level}`}
+                  key={day.key}
+                  title={`${day.key}: ${day.reps} repetitions`}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
         <div className="history-heading">
           <div>
             <p className="eyebrow">ACTIVITY LOG</p>

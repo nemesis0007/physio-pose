@@ -507,14 +507,14 @@ export const SCORING_PROFILES: Record<string, ScoringProfile> = {
     "Keep both elbows tucked and softly bent.",
   ),
   "push-up": rep(
-    "elbowBend", "Elbow bend", "Â°", "increase", 25, 70, 120, 20,
-    "70â€“120Â°", "pelvisTilt", "Pelvis rotation", "Â°", 20,
+    "elbowBend", "Elbow bend", "°", "increase", 25, 70, 120, 20,
+    "70–120°", "pelvisTilt", "Pelvis rotation", "°", 20,
     "Lower until the elbows reach the demonstrated range.",
     "Keep the pelvis level and the body moving as one unit.",
   ),
   "pull-up": rep(
-    "elbowBend", "Elbow bend", "Â°", "increase", 25, 75, 135, 20,
-    "75â€“135Â°", "kneeBend", "Knee bend", "Â°", 40,
+    "elbowBend", "Elbow bend", "°", "increase", 25, 75, 135, 20,
+    "75–135°", "kneeBend", "Knee bend", "°", 40,
     "Pull until the elbows reach the demonstrated range.",
     "Keep the legs quiet and avoid kicking for momentum.",
   ),

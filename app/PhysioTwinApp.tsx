@@ -15,6 +15,7 @@ import {
 import { SiteFooter } from "./SiteFooter";
 import { SiteHeader } from "./SiteHeader";
 import { recordExerciseActivity } from "./profile-storage";
+import { currentUsername } from "./auth-storage";
 import {
   advanceProtocol,
   getPoseMetrics,
@@ -172,7 +173,7 @@ function formatMetric(
   return value === undefined ? "—" : `${Math.round(value)}${unit}`;
 }
 
-export function PhysioTwinApp({ profileId }: { profileId: string | null }) {
+export function PhysioTwinApp() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -215,6 +216,15 @@ export function PhysioTwinApp({ profileId }: { profileId: string | null }) {
   const [progressSessions, setProgressSessions] = useState<ProgressSession[]>(
     [],
   );
+  const [profileId, setProfileId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setProfileId(currentUsername()),
+      0,
+    );
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search).get("exercise");
