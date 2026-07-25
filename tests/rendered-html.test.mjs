@@ -70,6 +70,9 @@ test("server-renders the model card and safety limitations", async () => {
   assert.match(html, /26 transparent hackathon rule profiles/);
   assert.match(html, /0–100 heuristic score/);
   assert.match(html, /No LLM/);
+  assert.match(html, /Random Forest baseline/);
+  assert.match(html, /Download Model Lab notebook/);
+  assert.match(html, /physiotwin-model-lab\.ipynb/);
   assert.match(html, /Prototype limitations/);
 });
 

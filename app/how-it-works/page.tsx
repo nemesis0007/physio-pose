@@ -68,9 +68,10 @@ export default function HowItWorksPage() {
               <h2 id="models-title">The complete technical truth.</h2>
             </div>
             <p>
-              The hackathon MVP trains no new neural network. It reuses a
-              compact pretrained pose estimator and keeps the clinical
-              decision logic readable.
+              The live MVP combines a pretrained landmark detector with
+              transparent rules. The included Model Lab demonstrates our
+              trainable temporal classifier pipeline without pretending that
+              synthetic demo metrics are clinical validation.
             </p>
           </div>
           <div className="model-table">
@@ -105,11 +106,44 @@ export default function HowItWorksPage() {
               <span>Produces a 0–100 heuristic score and traceable reason</span>
             </div>
             <div className="model-row">
+              <strong>Temporal classifier</strong>
+              <span>Random Forest baseline on normalized pose sequences</span>
+              <span>Yes — Model Lab</span>
+              <span>Classifies exercise and labelled form-error patterns</span>
+            </div>
+            <div className="model-row">
               <strong>Voice cue</strong>
               <span>Browser Speech Synthesis</span>
               <span>No LLM</span>
               <span>Reads the deterministic feedback aloud</span>
             </div>
+          </div>
+        </section>
+
+        <section className="model-lab-section" aria-labelledby="model-lab-title">
+          <div>
+            <p className="eyebrow">RUNNABLE ML PROOF</p>
+            <h2 id="model-lab-title">Open the training pipeline in Colab.</h2>
+            <p>
+              The notebook normalizes 33-landmark movement sequences, engineers
+              temporal position and velocity features, trains with grouped
+              holdout validation, plots a confusion matrix and exports both a
+              model artifact and an auditable model card.
+            </p>
+          </div>
+          <div className="model-lab-actions">
+            <a href="/physiotwin-model-lab.ipynb" download>
+              Download Model Lab notebook
+              <span>Upload the .ipynb file directly into Google Colab</span>
+            </a>
+            <a
+              href="https://colab.research.google.com/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open Google Colab
+              <span>File → Upload notebook → Run all</span>
+            </a>
           </div>
         </section>
 
