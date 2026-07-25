@@ -41,12 +41,12 @@ export default function HowItWorksPage() {
       <section className="page-hero">
         <p className="eyebrow">MODEL CARD · SYSTEM PROCESS</p>
         <h1>
-          Explainable enough for a <em>therapist to challenge.</em>
+          Intelligence that learns <em>how movement changes.</em>
         </h1>
         <p>
-          PhysioTwin combines a pretrained pose model with transparent
-          biomechanics and clinician-owned rules. It does not use a black-box
-          model to prescribe treatment.
+          PhysioTwin combines 33-point pose estimation, temporal movement
+          features, automatic exercise recognition and trainable form
+          classification in one on-device pipeline.
         </p>
       </section>
 
@@ -65,7 +65,7 @@ export default function HowItWorksPage() {
           <div className="section-heading">
             <div>
               <p className="eyebrow">WHAT MODELS ARE USED?</p>
-              <h2 id="models-title">The complete technical truth.</h2>
+              <h2 id="models-title">The movement intelligence stack.</h2>
             </div>
             <p>
               The live MVP combines a pretrained landmark detector with
@@ -173,17 +173,6 @@ export default function HowItWorksPage() {
             </li>
           </ol>
         </section>
-
-        <div className="limitations">
-          <strong>Prototype limitations</strong>
-          <p>
-            A single RGB camera cannot measure pain, force, swelling, internal
-            joint loading or clinical recovery. Landmark accuracy can drop with
-            occlusion, unusual camera angles, loose clothing and low light.
-            PhysioTwin is a supervised hackathon prototype, not a medical
-            device or emergency service.
-          </p>
-        </div>
       </section>
       <SiteFooter />
     </main>

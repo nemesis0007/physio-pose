@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "PhysioTwin | Movement intelligence for home rehabilitation",
   description:
-    "A privacy-first rehabilitation prototype with local video pose tracking, an exercise library and explainable therapist review.",
+    "Private movement intelligence with local video pose tracking, temporal form analysis and adaptive exercise scoring.",
   openGraph: {
     title: "PhysioTwin | Movement intelligence for rehabilitation",
     description:

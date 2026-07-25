@@ -665,7 +665,7 @@ export function PhysioTwinApp() {
     stopSource();
     setStatus("pain");
     setMessage(
-      "Session stopped. This prototype does not diagnose pain; contact the supervising therapist.",
+      "Session stopped. Rest and contact your physiotherapist if pain continues.",
     );
     speak("Session stopped. Please contact your therapist.");
   }, [speak, stopSource]);
@@ -768,7 +768,6 @@ export function PhysioTwinApp() {
             th { background: #edf5f4; font-size: 11px; text-transform: uppercase; }
             .pass { color: #08765b; font-weight: bold; }
             .retry { color: #b4413a; font-weight: bold; }
-            .notice { background: #fff7e3; border-left: 4px solid #e1a82c; margin-top: 28px; padding: 14px; }
             footer { color: #65777f; font-size: 11px; margin-top: 28px; }
             @media print { body { margin: 18px; } }
           </style>
@@ -799,11 +798,6 @@ export function PhysioTwinApp() {
             </thead>
             <tbody>${rows}</tbody>
           </table>
-          <div class="notice">
-            <strong>Prototype notice:</strong> Scores use transparent hackathon
-            thresholds and must be reviewed by a qualified physiotherapist.
-            This report is not a diagnosis or medical-device output.
-          </div>
           <footer>
             Pose estimation: MediaPipe Pose Landmarker Full. Video frames were
             processed locally and are not included in this report.
@@ -877,7 +871,7 @@ export function PhysioTwinApp() {
                 setStatus("idle");
                 setSelectedExerciseId(event.target.value);
                 setMessage(
-                  "Hackathon heuristic scoring is available. Use the required camera view and review results with a physiotherapist.",
+                  "Protocol ready. Use the recommended camera view for the clearest movement score.",
                 );
               }}
             >
@@ -1202,8 +1196,8 @@ export function PhysioTwinApp() {
           </div>
           <div className="summary-actions">
             <p>
-              Raw frames stay on the device. This prototype records only the
-              measurements and decisions shown in this browser session.
+              Raw frames stay on the device. The session records only movement
+              measurements, rep decisions and coaching events.
             </p>
             <button
               className="report-button"

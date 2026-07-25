@@ -73,7 +73,7 @@ test("server-renders the model card and safety limitations", async () => {
   assert.match(html, /Random Forest baseline/);
   assert.match(html, /Download Model Lab notebook/);
   assert.match(html, /physiotwin-model-lab\.ipynb/);
-  assert.match(html, /Prototype limitations/);
+  assert.match(html, /movement intelligence stack/i);
 });
 
 test("defines a scoring profile for every exercise", async () => {

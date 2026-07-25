@@ -449,7 +449,7 @@ body {
   letter-spacing: -.067em;
 }
 .hero h1 em {
-  background: linear-gradient(95deg, #1769ff, #7a5cff);
+  background: linear-gradient(95deg, #1769ff, #4bc8ff);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -785,7 +785,7 @@ body {
   height: 100%;
   display: block;
   border-radius: inherit;
-  background: linear-gradient(90deg, #1769ff, #7a5cff);
+  background: linear-gradient(90deg, #1769ff, #4bc8ff);
 }
 .symmetry-bars p { color: #737882; font-size: 12px; line-height: 1.5; }
 .event-panel {
@@ -861,7 +861,7 @@ body {
 .eyebrow { color: #8f96a5; }
 .hero h1 { color: #fbfcff; }
 .hero h1 em {
-  background: linear-gradient(100deg, #78a5ff 0, #a98cff 50%, #66d7ff 100%);
+  background: linear-gradient(100deg, #78a5ff 0, #62bdff 52%, #68e8ff 100%);
   -webkit-background-clip: text;
   background-clip: text;
 }
@@ -878,7 +878,8 @@ body {
   box-shadow: inset 0 1px #ffffff0c, 0 14px 40px #00000026;
   backdrop-filter: blur(22px);
 }
-.exercise-select select option { color: #111318; background: white; }
+.exercise-select select { color-scheme: dark; }
+.exercise-select select option { color: #f5f7fb; background: #090a0d; }
 .exercise-select small { color: #858b97; }
 .intelligence-controls button,
 .intelligence-controls label {
@@ -1114,10 +1115,10 @@ body {
 .summary-grid article > span { color: #777e8a; }
 .summary-grid strong { color: #f6f7fa; }
 .report-button {
-  background: linear-gradient(110deg, #467cf7, #7158e8);
+  background: linear-gradient(110deg, #467cf7, #36a8f2);
   box-shadow: 0 12px 32px #3d64d43d;
 }
-.report-button:hover:not(:disabled) { background: linear-gradient(110deg, #5b8bfa, #8068ed); }
+.report-button:hover:not(:disabled) { background: linear-gradient(110deg, #5b8bfa, #4fbff7); }
 .report-button:disabled {
   border-color: #ffffff10;
   background: #ffffff08;
@@ -1213,7 +1214,7 @@ footer span { color: #737985; }
 }
 .model-lab-actions a:first-child {
   border-color: #759cff65;
-  background: linear-gradient(110deg, #477cf4, #7557df);
+  background: linear-gradient(110deg, #477cf4, #2ba9ef);
 }
 .model-lab-actions a:hover { transform: translateY(-1px); }
 .model-lab-actions span {

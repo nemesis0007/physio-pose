@@ -13,8 +13,8 @@ export default function ExercisesPage() {
         </h1>
         <p>
           Browse 26 movement protocols across knee, hip, shoulder, strength,
-          spine, ankle and balance care. A therapist should select the
-          exercise, dose and safe range for each patient.
+          spine, ankle and balance care, each with motion guidance and
+          explainable scoring.
         </p>
       </section>
       <section className="content-page">
@@ -22,9 +22,7 @@ export default function ExercisesPage() {
           <strong>All protocols now have explainable demo scoring.</strong>
           <p>
             Every movement supports private video playback, pose overlay and a
-            visible rep-range or stability-hold heuristic. These hackathon
-            profiles demonstrate the product workflow; a physiotherapist must
-            review and validate every threshold before patient use.
+            visible rep-range or stability-hold score.
           </p>
         </div>
         <ExerciseLibrary />

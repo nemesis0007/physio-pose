@@ -17,7 +17,6 @@ export function SiteHeader() {
       </div>
       <div className="nav-meta">
         <span className="privacy-dot" /> Private by default
-        <span className="prototype-pill">Hackathon prototype</span>
       </div>
     </nav>
   );
