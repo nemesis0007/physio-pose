@@ -470,7 +470,11 @@ function exerciseKeyframes(exerciseId: string): [Pose, Pose] {
 }
 
 function material(color: number, roughness = 0.72) {
-  return new THREE.MeshStandardMaterial({ color, roughness });
+  return new THREE.MeshStandardMaterial({
+    color,
+    roughness,
+    metalness: 0.04,
+  });
 }
 
 function addSegment(
@@ -491,7 +495,7 @@ function addSegment(
 function joint(parent: THREE.Group, radius: number) {
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(radius, 20, 14),
-    material(0xf7c873, 0.55),
+    material(0xd7a57e, 0.58),
   );
   parent.add(mesh);
   return mesh;
@@ -504,7 +508,7 @@ function createRig(scene: THREE.Scene): Rig {
 
   const pelvis = new THREE.Mesh(
     new THREE.CapsuleGeometry(0.24, 0.14, 8, 20),
-    material(0x183f52),
+    material(0x1d2633),
   );
   pelvis.rotation.z = Math.PI / 2;
   root.add(pelvis);
@@ -513,39 +517,54 @@ function createRig(scene: THREE.Scene): Rig {
   root.add(torso);
   const torsoMesh = new THREE.Mesh(
     new THREE.CapsuleGeometry(0.3, 0.64, 10, 24),
-    material(0x0f9d8d),
+    material(0x3a7cff, 0.42),
   );
   torsoMesh.position.y = 0.48;
   torso.add(torsoMesh);
 
   const neck = new THREE.Mesh(
     new THREE.CylinderGeometry(0.1, 0.11, 0.18, 16),
-    material(0xe3b58f),
+    material(0xd7a57e),
   );
   neck.position.y = 0.96;
   torso.add(neck);
 
   const head = new THREE.Mesh(
     new THREE.SphereGeometry(0.22, 24, 18),
-    material(0xe3b58f),
+    material(0xd7a57e),
   );
   head.scale.set(0.84, 1.06, 0.9);
   head.position.y = 1.22;
   torso.add(head);
+  const hair = new THREE.Mesh(
+    new THREE.SphereGeometry(0.226, 24, 18, 0, Math.PI * 2, 0, 1.45),
+    material(0x1e2630, 0.9),
+  );
+  hair.scale.set(0.85, 1.02, 0.91);
+  hair.position.set(0, 1.27, -0.015);
+  torso.add(hair);
+  for (const x of [-0.07, 0.07]) {
+    const eye = new THREE.Mesh(
+      new THREE.SphereGeometry(0.018, 12, 8),
+      material(0x18202a, 0.5),
+    );
+    eye.position.set(x, 1.25, 0.195);
+    torso.add(eye);
+  }
 
   const leftShoulder = new THREE.Group();
   leftShoulder.position.set(-0.34, 0.82, 0);
   torso.add(leftShoulder);
   joint(leftShoulder, 0.105);
-  addSegment(leftShoulder, 0.54, 0.09, 0x1a5368);
+  addSegment(leftShoulder, 0.54, 0.09, 0x2f69dc);
   const leftElbow = new THREE.Group();
   leftElbow.position.y = -0.54;
   leftShoulder.add(leftElbow);
   joint(leftElbow, 0.085);
-  addSegment(leftElbow, 0.48, 0.075, 0xe3b58f);
+  addSegment(leftElbow, 0.48, 0.075, 0xd7a57e);
   const leftHand = new THREE.Mesh(
     new THREE.SphereGeometry(0.105, 16, 12),
-    material(0xe3b58f),
+    material(0xd7a57e),
   );
   leftHand.scale.set(0.8, 1.25, 0.6);
   leftHand.position.y = -0.53;
@@ -560,19 +579,19 @@ function createRig(scene: THREE.Scene): Rig {
   leftHip.position.set(-0.16, -0.08, 0);
   root.add(leftHip);
   joint(leftHip, 0.12);
-  addSegment(leftHip, 0.68, 0.12, 0x173e52);
+  addSegment(leftHip, 0.68, 0.12, 0x202b38);
   const leftKnee = new THREE.Group();
   leftKnee.position.y = -0.68;
   leftHip.add(leftKnee);
   joint(leftKnee, 0.105);
-  addSegment(leftKnee, 0.66, 0.095, 0x214f64);
+  addSegment(leftKnee, 0.66, 0.095, 0xd7a57e);
   const leftAnkle = new THREE.Group();
   leftAnkle.position.y = -0.66;
   leftKnee.add(leftAnkle);
   joint(leftAnkle, 0.08);
   const leftFoot = new THREE.Mesh(
     new THREE.CapsuleGeometry(0.095, 0.28, 6, 14),
-    material(0x102b3b),
+    material(0xf7f9fc, 0.34),
   );
   leftFoot.rotation.x = Math.PI / 2;
   leftFoot.position.set(0, -0.05, 0.16);
@@ -776,8 +795,8 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
     if (!host) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a1821);
-    scene.fog = new THREE.Fog(0x0a1821, 6, 11);
+    scene.background = new THREE.Color(0xf2f5fa);
+    scene.fog = new THREE.Fog(0xf2f5fa, 7, 12);
 
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 50);
     camera.position.set(3.8, 2.4, 5.4);
@@ -802,19 +821,19 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
     controls.maxPolarAngle = Math.PI / 2.02;
     applyCameraPreset(exerciseIdRef.current, camera, controls);
 
-    scene.add(new THREE.HemisphereLight(0xd9fffa, 0x102b3b, 2.2));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x9babbd, 2.45));
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.8);
     keyLight.position.set(3, 6, 4);
     keyLight.castShadow = true;
     scene.add(keyLight);
-    const rimLight = new THREE.DirectionalLight(0x68e3d2, 1.8);
+    const rimLight = new THREE.DirectionalLight(0x75a7ff, 1.7);
     rimLight.position.set(-4, 3, -3);
     scene.add(rimLight);
 
     const floor = new THREE.Mesh(
       new THREE.CircleGeometry(4.2, 64),
       new THREE.MeshStandardMaterial({
-        color: 0x102b3b,
+        color: 0xe4e9f1,
         roughness: 0.9,
       }),
     );
@@ -822,7 +841,7 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
     floor.receiveShadow = true;
     scene.add(floor);
 
-    const grid = new THREE.GridHelper(7, 14, 0x286071, 0x173744);
+    const grid = new THREE.GridHelper(7, 14, 0xb8c4d3, 0xd5dce6);
     grid.position.y = 0.005;
     scene.add(grid);
 
@@ -833,6 +852,12 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
     rig.wall.visible = exerciseIdRef.current === "wall-slide";
     rig.mat.visible = FLOOR_IDS.has(exerciseIdRef.current);
     rig.bar.visible = exerciseIdRef.current === "pull-up";
+    rig.root.traverse((object) => {
+      if (object instanceof THREE.Mesh) {
+        object.castShadow = true;
+        object.receiveShadow = true;
+      }
+    });
 
     const resize = () => {
       const { width, height } = host.getBoundingClientRect();

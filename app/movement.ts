@@ -26,6 +26,15 @@ export type PoseMetrics = {
   singleLegLift: number;
   confidence: number;
   side: "left" | "right";
+  leftKneeAngle: number;
+  rightKneeAngle: number;
+  leftElbowBend: number;
+  rightElbowBend: number;
+  leftShoulderAngle: number;
+  rightShoulderAngle: number;
+  leftHipAngle: number;
+  rightHipAngle: number;
+  symmetryScore: number;
 };
 
 export type RepTracker = {
@@ -248,6 +257,27 @@ export function getPoseMetrics(
     100;
   const singleLegLift =
     (Math.abs(left.ankle.y - right.ankle.y) / legLength) * 100;
+  const leftKneeAngle = angleAt(left.hip, left.knee, left.ankle);
+  const rightKneeAngle = angleAt(right.hip, right.knee, right.ankle);
+  const leftElbowBend =
+    180 - angleAt(left.shoulder, left.elbow, left.wrist);
+  const rightElbowBend =
+    180 - angleAt(right.shoulder, right.elbow, right.wrist);
+  const leftShoulderAngle = angleAt(left.elbow, left.shoulder, left.hip);
+  const rightShoulderAngle = angleAt(
+    right.elbow,
+    right.shoulder,
+    right.hip,
+  );
+  const leftHipAngle = angleAt(left.shoulder, left.hip, left.knee);
+  const rightHipAngle = angleAt(right.shoulder, right.hip, right.knee);
+  const bilateralDifference = average([
+    Math.abs(leftKneeAngle - rightKneeAngle),
+    Math.abs(leftElbowBend - rightElbowBend),
+    Math.abs(leftShoulderAngle - rightShoulderAngle),
+    Math.abs(leftHipAngle - rightHipAngle),
+  ]);
+  const symmetryScore = clamp(100 - bilateralDifference * 2.2, 0, 100);
 
   return {
     kneeAngle,
@@ -267,6 +297,15 @@ export function getPoseMetrics(
     singleLegLift,
     confidence,
     side,
+    leftKneeAngle,
+    rightKneeAngle,
+    leftElbowBend,
+    rightElbowBend,
+    leftShoulderAngle,
+    rightShoulderAngle,
+    leftHipAngle,
+    rightHipAngle,
+    symmetryScore,
   };
 }
 

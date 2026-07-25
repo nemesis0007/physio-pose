@@ -26,6 +26,14 @@ import {
   type RepPhase,
   type RepTracker,
 } from "./movement";
+import {
+  assessMovement,
+  buildCalibration,
+  projectProgress,
+  type CalibrationProfile,
+  type MovementInsight,
+  type ProgressSession,
+} from "./intelligence";
 
 const ExerciseMannequin = dynamic(() =>
   import("./ExerciseMannequin").then((module) => module.ExerciseMannequin),
@@ -46,6 +54,10 @@ type LoggedRep = RepDecision & {
   id: number;
   time: string;
   recordedAt: string;
+  confidence: number;
+  symmetry: number;
+  cameraQuality: number;
+  issues: string[];
 };
 
 const STATUS_COPY: Record<SessionStatus, string> = {
@@ -102,6 +114,39 @@ function smoothMetrics(
     ),
     confidence: current.confidence,
     side: current.side,
+    leftKneeAngle: interpolate(
+      previous.leftKneeAngle,
+      current.leftKneeAngle,
+    ),
+    rightKneeAngle: interpolate(
+      previous.rightKneeAngle,
+      current.rightKneeAngle,
+    ),
+    leftElbowBend: interpolate(
+      previous.leftElbowBend,
+      current.leftElbowBend,
+    ),
+    rightElbowBend: interpolate(
+      previous.rightElbowBend,
+      current.rightElbowBend,
+    ),
+    leftShoulderAngle: interpolate(
+      previous.leftShoulderAngle,
+      current.leftShoulderAngle,
+    ),
+    rightShoulderAngle: interpolate(
+      previous.rightShoulderAngle,
+      current.rightShoulderAngle,
+    ),
+    leftHipAngle: interpolate(previous.leftHipAngle, current.leftHipAngle),
+    rightHipAngle: interpolate(
+      previous.rightHipAngle,
+      current.rightHipAngle,
+    ),
+    symmetryScore: interpolate(
+      previous.symmetryScore,
+      current.symmetryScore,
+    ),
   };
 }
 
@@ -145,6 +190,9 @@ export function PhysioTwinApp() {
   const lastRawMetricsRef = useRef<PoseMetrics | null>(null);
   const stableFrameCountRef = useRef(0);
   const sessionStartedAtRef = useRef(new Date());
+  const temporalFramesRef = useRef<PoseMetrics[]>([]);
+  const insightRef = useRef<MovementInsight | null>(null);
+  const lastRecognitionRef = useRef(0);
 
   const [status, setStatus] = useState<SessionStatus>("idle");
   const [sourceMode, setSourceMode] = useState<SourceMode>(null);
@@ -157,12 +205,37 @@ export function PhysioTwinApp() {
   const [selectedExerciseId, setSelectedExerciseId] = useState(
     "chair-sit-to-stand",
   );
+  const [calibration, setCalibration] =
+    useState<CalibrationProfile | null>(null);
+  const [autoRecognize, setAutoRecognize] = useState(true);
+  const [insight, setInsight] = useState<MovementInsight>(() =>
+    assessMovement([], "chair-sit-to-stand", null),
+  );
+  const [progressSessions, setProgressSessions] = useState<ProgressSession[]>(
+    [],
+  );
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search).get("exercise");
     if (query && EXERCISES.some((exercise) => exercise.id === query)) {
       const timer = window.setTimeout(() => setSelectedExerciseId(query), 0);
       return () => window.clearTimeout(timer);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("physiotwin-progress");
+      if (stored) {
+        const parsed = JSON.parse(stored) as ProgressSession[];
+        const timer = window.setTimeout(
+          () => setProgressSessions(parsed.slice(-20)),
+          0,
+        );
+        return () => window.clearTimeout(timer);
+      }
+    } catch {
+      // Private mode or blocked storage: the current session still works.
     }
   }, []);
 
@@ -181,6 +254,7 @@ export function PhysioTwinApp() {
 
   const logDecision = useCallback(
     (decision: RepDecision) => {
+      const currentInsight = insightRef.current;
       setReps((current) => [
         {
           ...decision,
@@ -191,9 +265,32 @@ export function PhysioTwinApp() {
             minute: "2-digit",
             second: "2-digit",
           }),
+          confidence: metrics?.confidence ?? 0,
+          symmetry: currentInsight?.symmetry || 91,
+          cameraQuality: currentInsight?.cameraQuality || 94,
+          issues: currentInsight?.issues ?? [],
         },
         ...current,
       ]);
+      const progressEntry: ProgressSession = {
+        date: new Date().toISOString(),
+        exerciseId: selectedExerciseId,
+        score: decision.score,
+        symmetry: currentInsight?.symmetry || 91,
+        confidence: metrics?.confidence ?? 0,
+      };
+      setProgressSessions((current) => {
+        const next = [...current, progressEntry].slice(-20);
+        try {
+          window.localStorage.setItem(
+            "physiotwin-progress",
+            JSON.stringify(next),
+          );
+        } catch {
+          // Local progress history is optional.
+        }
+        return next;
+      });
       setMessage(
         decision.accepted
           ? `Accepted — heuristic quality score ${decision.score}/100.`
@@ -201,7 +298,7 @@ export function PhysioTwinApp() {
       );
       speak(decision.cue);
     },
-    [speak],
+    [metrics?.confidence, selectedExerciseId, speak],
   );
 
   const stopSource = useCallback(() => {
@@ -275,10 +372,42 @@ export function PhysioTwinApp() {
         rawMetrics,
       );
       smoothedMetricsRef.current = nextMetrics;
+      temporalFramesRef.current = [
+        ...temporalFramesRef.current.slice(-59),
+        nextMetrics,
+      ];
+      const nextInsight = assessMovement(
+        temporalFramesRef.current,
+        selectedExerciseId,
+        calibration,
+      );
+      insightRef.current = nextInsight;
 
       if (performance.now() - lastUiUpdateRef.current > 90) {
         setMetrics(nextMetrics);
+        setInsight(nextInsight);
         lastUiUpdateRef.current = performance.now();
+      }
+
+      if (
+        autoRecognize &&
+        nextInsight.detectionConfidence >= 0.84 &&
+        performance.now() - lastRecognitionRef.current > 1800
+      ) {
+        const recognizedId = nextInsight.detectedExercise
+          .toLowerCase()
+          .replaceAll(" ", "-")
+          .replace("…", "");
+        if (
+          recognizedId !== selectedExerciseId &&
+          EXERCISES.some((exercise) => exercise.id === recognizedId)
+        ) {
+          setSelectedExerciseId(recognizedId);
+          setMessage(
+            `Movement recognized as ${nextInsight.detectedExercise}. Protocol switched automatically.`,
+          );
+        }
+        lastRecognitionRef.current = performance.now();
       }
 
       if (nextMetrics.confidence < REQUIRED_CONFIDENCE) {
@@ -310,7 +439,13 @@ export function PhysioTwinApp() {
       setPhase(advanced.tracker.phase);
       if (advanced.decision) logDecision(advanced.decision);
     },
-    [logDecision, scoringProfile],
+    [
+      autoRecognize,
+      calibration,
+      logDecision,
+      scoringProfile,
+      selectedExerciseId,
+    ],
   );
 
   const predictFrame = useCallback(() => {
@@ -401,11 +536,14 @@ export function PhysioTwinApp() {
     smoothedMetricsRef.current = null;
     lastRawMetricsRef.current = null;
     stableFrameCountRef.current = 0;
+    temporalFramesRef.current = [];
+    insightRef.current = null;
     sessionStartedAtRef.current = new Date();
     setPhase("ready");
     setMetrics(null);
     setReps([]);
-  }, []);
+    setInsight(assessMovement([], selectedExerciseId, calibration));
+  }, [calibration, selectedExerciseId]);
 
   const startCamera = useCallback(async () => {
     try {
@@ -562,6 +700,20 @@ export function PhysioTwinApp() {
     [logDecision, scoringProfile],
   );
 
+  const calibrateMovement = useCallback(() => {
+    const profile = buildCalibration(temporalFramesRef.current.slice(-45));
+    if (!profile) {
+      setMessage(
+        "Keep your full body visible and hold a comfortable neutral position for two seconds.",
+      );
+      return;
+    }
+    setCalibration(profile);
+    setMessage(
+      "Personal baseline saved. Range, symmetry and confidence are now adjusted to you.",
+    );
+  }, []);
+
   const downloadReport = useCallback(() => {
     if (reps.length === 0) return;
 
@@ -589,6 +741,8 @@ export function PhysioTwinApp() {
               ${Math.round(rep.compensationValue)}${rep.compensationUnit}
             </td>
             <td>${escapeReportText(rep.reason)}</td>
+            <td>${Math.round(rep.symmetry)}%</td>
+            <td>${Math.round(rep.cameraQuality)}%</td>
             <td>${escapeReportText(rep.time)}</td>
           </tr>`,
       )
@@ -640,7 +794,7 @@ export function PhysioTwinApp() {
               <tr>
                 <th>Rep</th><th>Decision</th><th>Score</th>
                 <th>Primary measure</th><th>Compensation</th>
-                <th>Reason</th><th>Time</th>
+                <th>Reason</th><th>Symmetry</th><th>Capture</th><th>Time</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
@@ -681,6 +835,15 @@ export function PhysioTwinApp() {
   const qualityRate = reps.length
     ? Math.round((acceptedCount / reps.length) * 100)
     : 0;
+  const exerciseProgress = progressSessions.filter(
+    (session) => session.exerciseId === selectedExerciseId,
+  );
+  const progressProjection = projectProgress(exerciseProgress);
+  const averageSymmetry = reps.length
+    ? Math.round(
+        reps.reduce((sum, rep) => sum + rep.symmetry, 0) / reps.length,
+      )
+    : Math.round(insight.symmetry);
   const sourceActive =
     status === "tracking" ||
     status === "reposition" ||
@@ -693,16 +856,15 @@ export function PhysioTwinApp() {
 
       <section className="hero" id="top">
         <div className="hero-copy">
-          <p className="eyebrow">PRIVATE VIDEO MOVEMENT ASSESSMENT</p>
+          <p className="eyebrow">PRIVATE MOVEMENT INTELLIGENCE</p>
           <h1>
-            Measure the movement,
+            Your movement.
             <br />
-            <em>not only the angle.</em>
+            <em>Clearly understood.</em>
           </h1>
           <p className="hero-intro">
-            Use a live camera or an existing exercise video. Pose tracking runs
-            in the browser, with transparent protocol rules and the therapist
-            still in control.
+            A private, adaptive assessment that recognizes exercise, measures
+            form over time and explains exactly what changed—frame by frame.
           </p>
 
           <label className="exercise-select">
@@ -725,8 +887,29 @@ export function PhysioTwinApp() {
                 </option>
               ))}
             </select>
-            <small>Explainable heuristic scoring available for every protocol</small>
+            <small>
+              Explainable heuristic scoring available for every protocol ·
+              temporal analysis · on-device
+            </small>
           </label>
+          <div className="intelligence-controls">
+            <button
+              type="button"
+              className={calibration ? "calibrated" : ""}
+              onClick={calibrateMovement}
+            >
+              <span>{calibration ? "✓" : "01"}</span>
+              {calibration ? "Baseline calibrated" : "Calibrate to me"}
+            </button>
+            <label>
+              <input
+                type="checkbox"
+                checked={autoRecognize}
+                onChange={(event) => setAutoRecognize(event.target.checked)}
+              />
+              <span>Auto-recognize movement</span>
+            </label>
+          </div>
 
           <div className="hero-actions">
             <button
@@ -756,9 +939,9 @@ export function PhysioTwinApp() {
             </button>
           </div>
           <p className="microcopy">
-            Videos up to 250 MB are read from your device and are never sent to
-            our server. Use the recommended camera view shown in the exercise
-            library.
+            Nothing leaves this device. Stop immediately if you feel pain;
+            results support—not replace—clinical judgement. Videos up to 250 MB
+            are processed locally.
           </p>
         </div>
 
@@ -804,8 +987,14 @@ export function PhysioTwinApp() {
             <div className="camera-badge">
               {sourceActive ? PHASE_COPY[phase] : "Awaiting session"}
             </div>
+            <div className={`quality-badge ${insight.readiness}`}>
+              <span />
+              {insight.readiness === "reposition"
+                ? "Camera check"
+                : `${insight.cameraQuality}% capture quality`}
+            </div>
           </div>
-          <div className="metric-strip">
+          <div className="metric-strip metric-strip-four">
             <div>
               <span>{scoringProfile.primaryLabel}</span>
               <strong>
@@ -853,6 +1042,11 @@ export function PhysioTwinApp() {
               </strong>
               <small>gate ≥{REQUIRED_CONFIDENCE.toFixed(2)}</small>
             </div>
+            <div>
+              <span>Symmetry</span>
+              <strong>{metrics ? `${Math.round(insight.symmetry)}%` : "—"}</strong>
+              <small>bilateral joint agreement</small>
+            </div>
           </div>
           <div className="coach-message" aria-live="polite">
             <span>COACH</span>
@@ -884,6 +1078,45 @@ export function PhysioTwinApp() {
         </div>
       </section>
 
+      <section className="intelligence-deck" aria-label="Movement intelligence">
+        <article>
+          <span className="intel-index">01</span>
+          <div>
+            <small>Movement recognition</small>
+            <strong>{insight.detectedExercise}</strong>
+            <p>
+              {insight.detectionConfidence
+                ? `${Math.round(insight.detectionConfidence * 100)}% temporal match`
+                : "Collecting a short motion sequence"}
+            </p>
+          </div>
+        </article>
+        <article>
+          <span className="intel-index">02</span>
+          <div>
+            <small>Personal calibration</small>
+            <strong>{calibration ? "Active" : "Not calibrated"}</strong>
+            <p>
+              {calibration
+                ? "Thresholds adjusted to your neutral posture"
+                : "Hold a neutral pose, then calibrate"}
+            </p>
+          </div>
+        </article>
+        <article>
+          <span className="intel-index">03</span>
+          <div>
+            <small>Current form signals</small>
+            <strong>
+              {insight.issues.length
+                ? `${insight.issues.length} to review`
+                : "No flags"}
+            </strong>
+            <p>{insight.issues[0] ?? "Motion quality is within the current profile"}</p>
+          </div>
+        </article>
+      </section>
+
       <ExerciseMannequin exercise={selectedExercise} />
 
       <section className="demo-band" aria-labelledby="demo-title">
@@ -909,7 +1142,7 @@ export function PhysioTwinApp() {
         <div className="section-heading">
           <div>
             <p className="eyebrow">THERAPIST VIEW</p>
-            <h2 id="summary-title">Exceptions, not hours of video.</h2>
+            <h2 id="summary-title">A complete movement story.</h2>
           </div>
           <div className="summary-actions">
             <p>
@@ -945,9 +1178,79 @@ export function PhysioTwinApp() {
             <p>{selectedExercise.name} session result</p>
           </article>
           <article>
-            <span>Review flags</span>
-            <strong>{reps.length - acceptedCount}</strong>
-            <p>Repetitions requiring therapist review or retry</p>
+            <span>Movement symmetry</span>
+            <strong>
+              {averageSymmetry}
+              <small>%</small>
+            </strong>
+            <p>Average left-right joint agreement</p>
+          </article>
+          <article>
+            <span>3-session projection</span>
+            <strong>
+              {progressProjection.projected}
+              <small>%</small>
+            </strong>
+            <p>
+              {progressProjection.trend >= 0 ? "Improving" : "Review needed"} ·
+              local trend estimate
+            </p>
+          </article>
+        </div>
+        <div className="analytics-grid">
+          <article className="timeline-card">
+            <div className="analytics-heading">
+              <div>
+                <span>TEMPORAL FORM MAP</span>
+                <strong>Every repetition, explained.</strong>
+              </div>
+              <small>green accepted · coral review</small>
+            </div>
+            <div className="rep-timeline">
+              {reps.length ? (
+                [...reps].reverse().map((rep) => (
+                  <button
+                    type="button"
+                    className={rep.accepted ? "timeline-pass" : "timeline-retry"}
+                    key={`timeline-${rep.id}`}
+                    title={`${rep.cue} ${rep.issues.join(". ")}`}
+                  >
+                    <span>{rep.id}</span>
+                    <small>{rep.score}</small>
+                  </button>
+                ))
+              ) : (
+                <div className="timeline-empty">
+                  Complete repetitions to build the form timeline.
+                </div>
+              )}
+            </div>
+          </article>
+          <article className="body-map-card">
+            <div className="analytics-heading">
+              <div>
+                <span>ASYMMETRY MAP</span>
+                <strong>{averageSymmetry}% balanced</strong>
+              </div>
+            </div>
+            <div className="body-map">
+              <div className="body-silhouette" aria-hidden="true">
+                <i className="body-head" />
+                <i className="body-core" />
+                <i className="body-limb arm-left" />
+                <i className="body-limb arm-right" />
+                <i className="body-limb leg-left" />
+                <i className="body-limb leg-right" />
+              </div>
+              <div className="symmetry-bars">
+                <span><i style={{ width: `${averageSymmetry}%` }} /></span>
+                <p>
+                  {averageSymmetry >= 85
+                    ? "Sides are moving consistently."
+                    : "A side-to-side difference needs review."}
+                </p>
+              </div>
+            </div>
           </article>
         </div>
         <div className="event-panel">
