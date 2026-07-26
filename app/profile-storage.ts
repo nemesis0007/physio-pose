@@ -80,4 +80,21 @@ export function recordExerciseActivity(
     JSON.stringify(next),
   );
   window.dispatchEvent(new Event(PROFILE_HISTORY_EVENT));
+
+  void fetch("/api/care-plan", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      action: "progress",
+      patientId: profileId,
+      exerciseId: activity.exerciseId,
+      exerciseName: activity.exerciseName,
+      activityDate: date,
+      accepted: activity.accepted,
+      score: activity.score,
+      occurredAt: now.toISOString(),
+    }),
+  }).catch(() => {
+    // The local session remains usable if shared progress is unavailable.
+  });
 }

@@ -12,6 +12,7 @@ export function SiteHeader() {
       </Link>
       <div className="site-nav-links">
         <Link href="/">Assess</Link>
+        <Link href="/care-plan">Care plan</Link>
         <Link href="/exercises">Exercises</Link>
         <Link href="/how-it-works">How it works</Link>
         <Link href="/profile">Profile</Link>

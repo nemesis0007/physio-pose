@@ -85,6 +85,17 @@ test("server-renders the profile login experience", async () => {
   assert.match(html, /Profile/);
 });
 
+test("server-renders the shared patient and physio care plan", async () => {
+  const response = await render("/care-plan");
+  assert.equal(response.status, 200);
+
+  const html = await response.text();
+  assert.match(html, /CONNECTED HOME PROGRAMME/);
+  assert.match(html, /My daily plan/);
+  assert.match(html, /Physio workspace/);
+  assert.match(html, /patient’s profile ID/);
+});
+
 test("defines a scoring profile for every exercise", async () => {
   const [source, mannequin] = await Promise.all([
     readFile(new URL("../app/exercise-data.ts", import.meta.url), "utf8"),

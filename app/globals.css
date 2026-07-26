@@ -1597,3 +1597,594 @@ footer span { color: #737985; }
   .history-row { align-items: flex-start; flex-direction: column; }
   .history-row dl { width: 100%; justify-content: space-between; }
 }
+
+/* Shared patient–physio care plan */
+.care-plan-page {
+  width: min(1240px, calc(100% - 48px));
+  min-height: calc(100vh - 188px);
+  margin: 0 auto;
+  padding: 72px 0 100px;
+}
+.care-plan-hero {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 48px;
+}
+.care-plan-hero > div:first-child { max-width: 780px; }
+.care-plan-hero h1 {
+  margin: 0;
+  color: #f7f8fb;
+  font-size: clamp(50px, 6vw, 82px);
+  line-height: .96;
+  letter-spacing: -.065em;
+}
+.care-plan-hero > div:first-child > p:last-child {
+  max-width: 680px;
+  margin: 24px 0 0;
+  color: #959ca8;
+  font-size: 18px;
+  line-height: 1.65;
+}
+.care-mode-switch {
+  flex: 0 0 auto;
+  padding: 5px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid #ffffff14;
+  border-radius: 16px;
+  background: #050609;
+}
+.care-mode-switch button {
+  min-height: 44px;
+  padding: 0 17px;
+  border: 0;
+  border-radius: 12px;
+  color: #818895;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 760;
+  white-space: nowrap;
+}
+.care-mode-switch button.active {
+  color: white;
+  background: #1b1e25;
+  box-shadow: inset 0 1px #ffffff12;
+}
+.care-alert {
+  margin: 28px 0 0;
+  padding: 13px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+.care-alert-error {
+  border: 1px solid #ff747834;
+  color: #ff9295;
+  background: #ff61661a;
+}
+.care-alert-success {
+  border: 1px solid #42d17b35;
+  color: #68e69a;
+  background: #35c66d17;
+}
+.care-patient-workspace,
+.care-physio-workspace { padding-top: 60px; }
+.care-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  overflow: hidden;
+  border: 1px solid #ffffff14;
+  border-radius: 24px;
+  background: linear-gradient(145deg, #ffffff0d, #ffffff05);
+  box-shadow: inset 0 1px #ffffff0c;
+}
+.care-summary-grid article {
+  padding: 27px;
+  border-left: 1px solid #ffffff10;
+}
+.care-summary-grid article:first-child { border-left: 0; }
+.care-summary-grid span,
+.care-review-stats span {
+  color: #777f8b;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.care-summary-grid strong,
+.care-review-stats strong {
+  display: block;
+  margin-top: 10px;
+  color: #f8f9fb;
+  font-size: 36px;
+  letter-spacing: -.05em;
+}
+.care-summary-grid p {
+  margin: 4px 0 0;
+  color: #777e89;
+  font-size: 11px;
+}
+.care-section-heading {
+  margin: 68px 0 26px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+}
+.care-section-heading h2 {
+  margin: 8px 0 0;
+  color: #f5f7fa;
+  font-size: clamp(34px, 4vw, 52px);
+  line-height: 1;
+  letter-spacing: -.055em;
+}
+.care-section-heading > button {
+  padding: 11px 15px;
+  border: 1px solid #ffffff17;
+  border-radius: 999px;
+  color: #aeb4be;
+  background: #ffffff09;
+  font-size: 12px;
+}
+.care-subheading { margin-top: 78px; }
+.care-assignment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.care-assignment-card {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid #ffffff14;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 100% 0, #477af81b, transparent 38%),
+    linear-gradient(145deg, #ffffff0d, #ffffff05);
+  box-shadow: inset 0 1px #ffffff0c, 0 22px 55px #00000038;
+}
+.care-assignment-top {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 20px;
+}
+.care-assignment-top span {
+  color: #79a4ff;
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.care-assignment-top h3 {
+  margin: 7px 0 0;
+  color: #f6f7fa;
+  font-size: 23px;
+  letter-spacing: -.035em;
+}
+.care-status {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border-radius: 999px;
+  color: #9ca4af;
+  background: #ffffff0c;
+  font-size: 9px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.care-status-completed {
+  color: #68e69a;
+  background: #42d17b1a;
+}
+.care-status-in-progress {
+  color: #9bc0ff;
+  background: #5487ff1a;
+}
+.care-status-missed {
+  color: #ff9699;
+  background: #ff65691a;
+}
+.care-assignment-card > p {
+  min-height: 44px;
+  margin: 18px 0;
+  color: #969da8;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.care-progress-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: center;
+}
+.care-progress-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #ffffff0c;
+}
+.care-progress-track i {
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #467cf7, #4bd9aa);
+}
+.care-progress-row > strong {
+  color: #dfe3e9;
+  font-size: 12px;
+}
+.care-assignment-card dl {
+  margin: 20px 0 0;
+  padding: 16px 0;
+  display: grid;
+  grid-template-columns: .65fr .75fr 1.6fr;
+  gap: 14px;
+  border-top: 1px solid #ffffff0d;
+  border-bottom: 1px solid #ffffff0d;
+}
+.care-assignment-card dt {
+  color: #727a86;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.care-assignment-card dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  color: #e2e5ea;
+  font-size: 12px;
+  font-weight: 680;
+}
+.care-card-actions {
+  padding-top: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.care-card-actions a {
+  color: #91b3ff;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 760;
+}
+.care-card-actions button {
+  padding: 6px 0;
+  border: 0;
+  color: #8a919c;
+  background: transparent;
+  font-size: 11px;
+}
+.care-empty {
+  padding: 55px 28px;
+  border: 1px dashed #ffffff1c;
+  border-radius: 22px;
+  color: #f2f4f7;
+  text-align: center;
+  background: #ffffff05;
+}
+.care-empty p {
+  margin: 8px 0 0;
+  color: #818995;
+  font-size: 13px;
+}
+.care-empty a {
+  margin-top: 20px;
+  padding: 11px 17px;
+  display: inline-flex;
+  border-radius: 999px;
+  color: white;
+  background: linear-gradient(110deg, #467cf7, #35aaf2);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 750;
+}
+.care-previous {
+  margin-top: 70px;
+  color: #9da4af;
+}
+.care-previous summary {
+  padding: 18px 0;
+  cursor: pointer;
+  font-weight: 700;
+}
+.care-previous .care-assignment-grid { margin-top: 12px; }
+.care-physio-toolbar {
+  padding: 24px;
+  display: grid;
+  grid-template-columns: 1.25fr .75fr;
+  gap: 28px;
+  align-items: end;
+  border: 1px solid #ffffff14;
+  border-radius: 22px;
+  background: #ffffff08;
+}
+.care-physio-toolbar label,
+.care-assign-form label {
+  color: #858d99;
+  font-size: 10px;
+  font-weight: 740;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.care-physio-toolbar label > span {
+  margin-top: 9px;
+  display: flex;
+  gap: 9px;
+}
+.care-physio-toolbar input,
+.care-assign-form input,
+.care-assign-form select,
+.care-assign-form textarea {
+  width: 100%;
+  border: 1px solid #ffffff16;
+  border-radius: 13px;
+  outline: none;
+  color: #f4f6f8;
+  background: #07080b;
+  font: inherit;
+  font-size: 14px;
+  text-transform: none;
+}
+.care-physio-toolbar input,
+.care-assign-form input,
+.care-assign-form select {
+  min-height: 48px;
+  padding: 0 14px;
+}
+.care-assign-form textarea {
+  padding: 13px 14px;
+  resize: vertical;
+}
+.care-physio-toolbar input:focus,
+.care-assign-form input:focus,
+.care-assign-form select:focus,
+.care-assign-form textarea:focus {
+  border-color: #568bff;
+  box-shadow: 0 0 0 3px #568bff1b;
+}
+.care-physio-toolbar button,
+.care-assign-form > button {
+  min-height: 48px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 13px;
+  color: white;
+  background: linear-gradient(110deg, #467cf7, #35aaf2);
+  font-size: 12px;
+  font-weight: 760;
+  white-space: nowrap;
+}
+.care-physio-toolbar button:disabled,
+.care-assign-form > button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+.care-physio-toolbar > div > span,
+.care-physio-toolbar > div > small {
+  display: block;
+  color: #78808c;
+  font-size: 10px;
+}
+.care-physio-toolbar > div > strong {
+  margin: 6px 0;
+  display: block;
+  color: white;
+}
+.care-physio-layout {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 390px 1fr;
+  gap: 18px;
+  align-items: start;
+}
+.care-assign-form {
+  padding: 28px;
+  display: grid;
+  gap: 16px;
+  border: 1px solid #ffffff14;
+  border-radius: 22px;
+  background: linear-gradient(145deg, #ffffff0d, #ffffff05);
+  box-shadow: inset 0 1px #ffffff0c;
+}
+.care-assign-form h2 {
+  margin: -4px 0 8px;
+  color: #f7f8fb;
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: -.045em;
+}
+.care-assign-form label > input,
+.care-assign-form label > select,
+.care-assign-form label > textarea { margin-top: 8px; }
+.care-form-row {
+  display: grid;
+  grid-template-columns: 1.25fr .75fr;
+  gap: 11px;
+}
+.care-patient-review {
+  padding: 4px 28px 28px;
+  border: 1px solid #ffffff14;
+  border-radius: 22px;
+  background: #ffffff05;
+}
+.care-patient-review .care-section-heading { margin-top: 36px; }
+.care-review-stats {
+  margin-bottom: 22px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid #ffffff10;
+  border-radius: 17px;
+  background: #0506098c;
+}
+.care-review-stats > div {
+  padding: 18px;
+  border-left: 1px solid #ffffff0d;
+}
+.care-review-stats > div:first-child { border-left: 0; }
+.care-review-stats strong { font-size: 28px; }
+.care-review-list { grid-template-columns: 1fr; }
+.care-prototype-note {
+  max-width: 740px;
+  margin: 60px auto 0;
+  color: #686f7b;
+  font-size: 11px;
+  line-height: 1.6;
+  text-align: center;
+}
+.profile-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.profile-secondary-action {
+  padding: 14px 20px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #ffffff16;
+  border-radius: 999px;
+  color: #b4bac4;
+  background: #ffffff08;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (max-width: 1050px) {
+  .care-plan-hero { align-items: flex-start; flex-direction: column; }
+  .care-summary-grid { grid-template-columns: repeat(2, 1fr); }
+  .care-summary-grid article:nth-child(3) {
+    border-top: 1px solid #ffffff10;
+    border-left: 0;
+  }
+  .care-summary-grid article:nth-child(4) {
+    border-top: 1px solid #ffffff10;
+  }
+  .care-physio-layout { grid-template-columns: 1fr; }
+  .care-assign-form {
+    grid-template-columns: repeat(2, 1fr);
+    align-items: end;
+  }
+  .care-assign-form > .eyebrow,
+  .care-assign-form > h2,
+  .care-assign-form > button { grid-column: 1 / -1; }
+}
+
+@media (max-width: 720px) {
+  .topbar {
+    width: min(100% - 28px, 1480px);
+    height: auto;
+    min-height: 72px;
+    padding: 12px 0 10px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .brand { gap: 9px; }
+  .brand-mark { width: 38px; height: 38px; }
+  .brand small { display: none; }
+  .nav-meta { display: none; }
+  .site-nav-links {
+    order: 3;
+    width: 100%;
+    margin: 0;
+    padding: 2px 0 4px;
+    gap: 7px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .site-nav-links::-webkit-scrollbar { display: none; }
+  .site-nav-links a {
+    flex: 0 0 auto;
+    min-height: 38px;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid #ffffff12;
+    border-radius: 999px;
+    background: #ffffff07;
+    white-space: nowrap;
+  }
+  .hero h1 { font-size: clamp(39px, 12vw, 56px); }
+  .hero-intro { margin-top: 22px; font-size: 16px; }
+  .hero-actions,
+  .demo-actions { flex-direction: column; }
+  .hero-actions button,
+  .hero-actions .upload-button,
+  .demo-actions button { width: 100%; }
+  .camera-stage { aspect-ratio: 4 / 3; }
+  .metric-strip strong { font-size: 22px; }
+  .metric-strip > div { padding: 14px 12px; }
+  .coach-message {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+  .summary-grid { grid-template-columns: 1fr; }
+  .event-row {
+    margin: 10px;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    border: 1px solid #ffffff10;
+    border-radius: 14px;
+  }
+  .event-row > span:last-child { display: block; }
+  .protocol-strip { padding-left: 14px; padding-right: 14px; }
+  .page-hero,
+  .content-page {
+    width: min(100% - 28px, 1480px);
+  }
+  .page-hero { padding: 58px 0 45px; }
+  .page-hero h1 { font-size: clamp(42px, 13vw, 64px); }
+  .page-hero > p:last-child { font-size: 16px; }
+  .content-page { padding-top: 36px; }
+  .safety-callout { grid-template-columns: 1fr; gap: 12px; }
+  .library-tools { grid-template-columns: 1fr; }
+  .category-pills {
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .category-pills button { flex: 0 0 auto; }
+  .exercise-card { min-height: auto; }
+  .mannequin-stage { min-height: 390px; }
+  footer { padding-left: 14px; padding-right: 14px; }
+
+  .care-plan-page {
+    width: min(100% - 28px, 1240px);
+    padding: 46px 0 70px;
+  }
+  .care-plan-hero { gap: 30px; }
+  .care-plan-hero h1 { font-size: clamp(42px, 13vw, 58px); }
+  .care-plan-hero > div:first-child > p:last-child {
+    margin-top: 18px;
+    font-size: 15px;
+  }
+  .care-mode-switch { width: 100%; }
+  .care-mode-switch button { padding: 0 10px; white-space: normal; }
+  .care-patient-workspace,
+  .care-physio-workspace { padding-top: 38px; }
+  .care-summary-grid { grid-template-columns: repeat(2, 1fr); }
+  .care-summary-grid article { padding: 20px; }
+  .care-summary-grid strong { font-size: 30px; }
+  .care-section-heading {
+    margin-top: 52px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .care-assignment-grid { grid-template-columns: 1fr; }
+  .care-assignment-card { padding: 20px; }
+  .care-assignment-card dl {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .care-assignment-card dl > div:last-child { grid-column: 1 / -1; }
+  .care-physio-toolbar { grid-template-columns: 1fr; padding: 18px; }
+  .care-physio-toolbar label > span { flex-direction: column; }
+  .care-assign-form { padding: 22px; grid-template-columns: 1fr; }
+  .care-assign-form > * { grid-column: 1 !important; }
+  .care-form-row { grid-template-columns: 1fr; }
+  .care-patient-review { padding: 2px 18px 18px; }
+  .care-review-stats strong { font-size: 24px; }
+  .profile-heading-actions { width: 100%; }
+  .profile-heading-actions a { flex: 1; }
+}

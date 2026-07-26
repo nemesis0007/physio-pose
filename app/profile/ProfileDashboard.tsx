@@ -132,9 +132,14 @@ export function ProfileDashboard({
             <p className="eyebrow">ACTIVITY LOG</p>
             <h2>Exercises by day.</h2>
           </div>
-          <Link className="profile-primary-action" href="/">
-            Start assessment
-          </Link>
+          <div className="profile-heading-actions">
+            <Link className="profile-secondary-action" href="/care-plan">
+              Open care plan
+            </Link>
+            <Link className="profile-primary-action" href="/">
+              Start assessment
+            </Link>
+          </div>
         </div>
 
         {history.length === 0 ? (
