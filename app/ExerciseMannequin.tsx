@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { Exercise } from "./exercise-data";
 
 type Pose = {
@@ -51,6 +52,16 @@ type Rig = {
   wall: THREE.Mesh;
   mat: THREE.Mesh;
   bar: THREE.Group;
+};
+
+type Retarget = {
+  pivot: THREE.Group;
+  links: Array<{
+    driver: THREE.Object3D;
+    bone: THREE.Bone;
+    driverRest: THREE.Quaternion;
+    boneRest: THREE.Quaternion;
+  }>;
 };
 
 const DEG = Math.PI / 180;
@@ -752,6 +763,110 @@ function applyPose(rig: Rig, value: Pose) {
   );
 }
 
+function setWorldQuaternion(object: THREE.Object3D, world: THREE.Quaternion) {
+  const parentWorld = new THREE.Quaternion();
+  object.parent?.getWorldQuaternion(parentWorld);
+  object.quaternion.copy(parentWorld.invert().multiply(world));
+}
+
+function retargetPose(target: Retarget) {
+  for (const link of target.links) {
+    const driverWorld = link.driver.getWorldQuaternion(new THREE.Quaternion());
+    const parentWorld =
+      link.bone.parent?.getWorldQuaternion(new THREE.Quaternion()) ??
+      new THREE.Quaternion();
+    const delta = driverWorld.multiply(link.driverRest.clone().invert());
+    link.bone.quaternion.copy(
+      parentWorld.invert().multiply(delta.multiply(link.boneRest)),
+    );
+    link.bone.updateMatrixWorld(true);
+  }
+}
+
+async function loadRealisticHuman(scene: THREE.Scene, driver: Rig) {
+  const gltf = await new GLTFLoader().loadAsync(
+    "/models/physiotwin-human.glb",
+  );
+  const model = gltf.scene;
+  const bounds = new THREE.Box3().setFromObject(model);
+  const height = bounds.getSize(new THREE.Vector3()).y;
+  model.scale.setScalar(2.68 / Math.max(height, 0.01));
+
+  const pivot = new THREE.Group();
+  scene.add(pivot);
+  pivot.add(model);
+  model.updateMatrixWorld(true);
+  const pelvis = model.getObjectByName("pelvis") as THREE.Bone | undefined;
+  if (!pelvis) throw new Error("The human model is missing its pelvis bone.");
+  model.position.sub(pelvis.getWorldPosition(new THREE.Vector3()));
+  pivot.position.copy(driver.root.position);
+
+  model.traverse((object) => {
+    if (object instanceof THREE.Mesh) {
+      object.castShadow = true;
+      object.receiveShadow = true;
+      const materials = Array.isArray(object.material)
+        ? object.material
+        : [object.material];
+      materials.forEach((item) => {
+        if (item instanceof THREE.MeshStandardMaterial) {
+          item.envMapIntensity = 0.72;
+          item.roughness = Math.max(item.roughness, 0.36);
+        }
+      });
+    }
+  });
+
+  model.updateMatrixWorld(true);
+  for (const [name, angle] of [
+    ["upperarm_l", -Math.PI / 2],
+    ["upperarm_r", Math.PI / 2],
+  ] as Array<[string, number]>) {
+    const bone = model.getObjectByName(name) as THREE.Bone | undefined;
+    if (!bone) throw new Error(`The human model is missing ${name}.`);
+    const rest = bone.getWorldQuaternion(new THREE.Quaternion());
+    setWorldQuaternion(
+      bone,
+      new THREE.Quaternion()
+        .setFromAxisAngle(new THREE.Vector3(0, 0, 1), angle)
+        .multiply(rest),
+    );
+    bone.updateMatrixWorld(true);
+  }
+
+  applyPose(driver, STANDING);
+  driver.root.updateMatrixWorld(true);
+  model.updateMatrixWorld(true);
+  const pairs: Array<[THREE.Object3D, string]> = [
+    [driver.torso, "spine_01"],
+    [driver.leftShoulder, "upperarm_l"],
+    [driver.rightShoulder, "upperarm_r"],
+    [driver.leftElbow, "lowerarm_l"],
+    [driver.rightElbow, "lowerarm_r"],
+    [driver.leftHip, "thigh_l"],
+    [driver.rightHip, "thigh_r"],
+    [driver.leftKnee, "calf_l"],
+    [driver.rightKnee, "calf_r"],
+    [driver.leftAnkle, "foot_l"],
+    [driver.rightAnkle, "foot_r"],
+  ];
+  const links = pairs.map(([driverJoint, name]) => {
+    const bone = model.getObjectByName(name) as THREE.Bone | undefined;
+    if (!bone) throw new Error(`The human model is missing ${name}.`);
+    return {
+      driver: driverJoint,
+      bone,
+      driverRest: driverJoint.getWorldQuaternion(new THREE.Quaternion()),
+      boneRest: bone.getWorldQuaternion(new THREE.Quaternion()),
+    };
+  });
+
+  driver.root.traverse((object) => {
+    if (object instanceof THREE.Mesh) object.visible = false;
+  });
+  return { pivot, links } satisfies Retarget;
+}
+
 export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rigRef = useRef<Rig | null>(null);
@@ -846,6 +961,7 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
     scene.add(grid);
 
     const rig = createRig(scene);
+    let realistic: Retarget | null = null;
     rigRef.current = rig;
     rig.chair.visible = CHAIR_IDS.has(exerciseIdRef.current);
     rig.step.visible = exerciseIdRef.current === "step-up";
@@ -858,6 +974,16 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
         object.receiveShadow = true;
       }
     });
+    void loadRealisticHuman(scene, rig)
+      .then((loaded) => {
+        realistic = loaded;
+      })
+      .catch((problem) => {
+        console.warn(
+          "Realistic model unavailable; using fallback mannequin.",
+          problem,
+        );
+      });
 
     const resize = () => {
       const { width, height } = host.getBoundingClientRect();
@@ -879,6 +1005,12 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
       const wave = (Math.sin(elapsed * Math.PI) + 1) / 2;
       const [from, to] = exerciseKeyframes(exerciseIdRef.current);
       applyPose(rig, interpolatePose(from, to, wave));
+      if (realistic) {
+        realistic.pivot.position.copy(rig.root.position);
+        realistic.pivot.rotation.copy(rig.root.rotation);
+        realistic.pivot.updateMatrixWorld(true);
+        retargetPose(realistic);
+      }
       controls.update();
       renderer.render(scene, camera);
     };
@@ -913,8 +1045,9 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
           See the motion before you <em>perform it.</em>
         </h2>
         <p>
-          The same articulated mannequin demonstrates every protocol. Drag to
-          rotate, scroll to zoom, and slow the movement down before recording.
+          A Blender-optimized, anatomically proportioned human demonstrates
+          every protocol. Drag to rotate, scroll to zoom, and slow the movement
+          down before recording.
         </p>
         <div className="demo-protocol">
           <span>NOW SHOWING</span>
@@ -944,7 +1077,7 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
       <div className="mannequin-stage">
         <div ref={hostRef} className="mannequin-canvas" />
         <div className="model-badge">
-          <span className="privacy-dot" /> Reusable articulated model
+          <span className="privacy-dot" /> Rigged human model · Blender optimized
         </div>
         <div className="drag-hint">DRAG TO ROTATE · SCROLL TO ZOOM</div>
       </div>

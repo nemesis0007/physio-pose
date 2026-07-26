@@ -1,0 +1,9 @@
+PhysioTwin human model
+
+Derived from the standard free version of the Universal Base Characters Kit.
+Models by Quaternius: https://quaternius.com
+
+License: CC0 1.0 Universal (Public Domain Dedication)
+https://creativecommons.org/publicdomain/zero/1.0/
+
+The web-ready GLB was imported, material-tuned, and exported with Blender 5.1.
