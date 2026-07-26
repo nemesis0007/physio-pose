@@ -1,4 +1,7 @@
-import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
+import type {
+  Landmark,
+  NormalizedLandmark,
+} from "@mediapipe/tasks-vision";
 import type { MetricKey, ScoringProfile } from "./exercise-data";
 
 export type RepPhase =
@@ -39,6 +42,7 @@ export type PoseMetrics = {
 
 export type RepTracker = {
   phase: RepPhase;
+  armed: boolean;
   extremeValue: number;
   maxCompensation: number;
   startedAt: number;
@@ -46,6 +50,7 @@ export type RepTracker = {
   cooldownUntil: number;
   pendingTransition: "start" | "target" | "return" | "hold" | null;
   pendingFrames: number;
+  phaseEnteredAt: number;
 };
 
 export type RepDecision = {
@@ -83,6 +88,9 @@ const INDEX = {
 
 export const REQUIRED_CONFIDENCE = 0.65;
 const REQUIRED_TRANSITION_FRAMES = 3;
+const MIN_MOVEMENT_PHASE_MS = 180;
+const MIN_TARGET_PHASE_MS = 160;
+const MIN_COMPLETE_REP_MS = 650;
 const CORE_LANDMARKS = [11, 12, 23, 24, 25, 26, 27, 28] as const;
 
 function visibility(point: NormalizedLandmark) {
@@ -146,20 +154,22 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export function angleAt(
-  a: NormalizedLandmark,
-  b: NormalizedLandmark,
-  c: NormalizedLandmark,
+  a: Pick<Landmark, "x" | "y" | "z">,
+  b: Pick<Landmark, "x" | "y" | "z">,
+  c: Pick<Landmark, "x" | "y" | "z">,
 ) {
-  const ba = { x: a.x - b.x, y: a.y - b.y };
-  const bc = { x: c.x - b.x, y: c.y - b.y };
-  const numerator = ba.x * bc.x + ba.y * bc.y;
-  const denominator = Math.hypot(ba.x, ba.y) * Math.hypot(bc.x, bc.y);
+  const ba = { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+  const bc = { x: c.x - b.x, y: c.y - b.y, z: c.z - b.z };
+  const numerator = ba.x * bc.x + ba.y * bc.y + ba.z * bc.z;
+  const denominator =
+    Math.hypot(ba.x, ba.y, ba.z) * Math.hypot(bc.x, bc.y, bc.z);
   const cosine = clamp(numerator / Math.max(denominator, 1e-6), -1, 1);
   return (Math.acos(cosine) * 180) / Math.PI;
 }
 
 export function getPoseMetrics(
   landmarks: NormalizedLandmark[],
+  worldLandmarks?: Landmark[],
 ): PoseMetrics | null {
   if (landmarks.length < 33) return null;
 
@@ -183,6 +193,25 @@ export function getPoseMetrics(
     heel: landmarks[INDEX.rightHeel],
     foot: landmarks[INDEX.rightFoot],
   };
+  const spatial = worldLandmarks?.length === 33 ? worldLandmarks : landmarks;
+  const spatialLeft = {
+    shoulder: spatial[INDEX.leftShoulder],
+    elbow: spatial[INDEX.leftElbow],
+    wrist: spatial[INDEX.leftWrist],
+    hip: spatial[INDEX.leftHip],
+    knee: spatial[INDEX.leftKnee],
+    ankle: spatial[INDEX.leftAnkle],
+    foot: spatial[INDEX.leftFoot],
+  };
+  const spatialRight = {
+    shoulder: spatial[INDEX.rightShoulder],
+    elbow: spatial[INDEX.rightElbow],
+    wrist: spatial[INDEX.rightWrist],
+    hip: spatial[INDEX.rightHip],
+    knee: spatial[INDEX.rightKnee],
+    ankle: spatial[INDEX.rightAnkle],
+    foot: spatial[INDEX.rightFoot],
+  };
 
   const leftConfidence = average(
     Object.values(left).map((point) => visibility(point)),
@@ -191,6 +220,8 @@ export function getPoseMetrics(
     Object.values(right).map((point) => visibility(point)),
   );
   const selected = leftConfidence >= rightConfidence ? left : right;
+  const selectedSpatial =
+    leftConfidence >= rightConfidence ? spatialLeft : spatialRight;
   const side = leftConfidence >= rightConfidence ? "left" : "right";
   const confidence = Math.max(leftConfidence, rightConfidence);
 
@@ -208,28 +239,32 @@ export function getPoseMetrics(
     0.1,
   );
 
-  const kneeAngle = angleAt(selected.hip, selected.knee, selected.ankle);
+  const kneeAngle = angleAt(
+    selectedSpatial.hip,
+    selectedSpatial.knee,
+    selectedSpatial.ankle,
+  );
   const kneeBend = 180 - kneeAngle;
   const hipAngle = angleAt(
-    selected.shoulder,
-    selected.hip,
-    selected.knee,
+    selectedSpatial.shoulder,
+    selectedSpatial.hip,
+    selectedSpatial.knee,
   );
   const shoulderAngle = angleAt(
-    selected.elbow,
-    selected.shoulder,
-    selected.hip,
+    selectedSpatial.elbow,
+    selectedSpatial.shoulder,
+    selectedSpatial.hip,
   );
   const elbowAngle = angleAt(
-    selected.shoulder,
-    selected.elbow,
-    selected.wrist,
+    selectedSpatial.shoulder,
+    selectedSpatial.elbow,
+    selectedSpatial.wrist,
   );
   const elbowBend = 180 - elbowAngle;
   const ankleAngle = angleAt(
-    selected.knee,
-    selected.ankle,
-    selected.foot,
+    selectedSpatial.knee,
+    selectedSpatial.ankle,
+    selectedSpatial.foot,
   );
   const trunkLean =
     (Math.atan2(
@@ -257,20 +292,41 @@ export function getPoseMetrics(
     100;
   const singleLegLift =
     (Math.abs(left.ankle.y - right.ankle.y) / legLength) * 100;
-  const leftKneeAngle = angleAt(left.hip, left.knee, left.ankle);
-  const rightKneeAngle = angleAt(right.hip, right.knee, right.ankle);
-  const leftElbowBend =
-    180 - angleAt(left.shoulder, left.elbow, left.wrist);
-  const rightElbowBend =
-    180 - angleAt(right.shoulder, right.elbow, right.wrist);
-  const leftShoulderAngle = angleAt(left.elbow, left.shoulder, left.hip);
-  const rightShoulderAngle = angleAt(
-    right.elbow,
-    right.shoulder,
-    right.hip,
+  const leftKneeAngle = angleAt(
+    spatialLeft.hip,
+    spatialLeft.knee,
+    spatialLeft.ankle,
   );
-  const leftHipAngle = angleAt(left.shoulder, left.hip, left.knee);
-  const rightHipAngle = angleAt(right.shoulder, right.hip, right.knee);
+  const rightKneeAngle = angleAt(
+    spatialRight.hip,
+    spatialRight.knee,
+    spatialRight.ankle,
+  );
+  const leftElbowBend =
+    180 - angleAt(spatialLeft.shoulder, spatialLeft.elbow, spatialLeft.wrist);
+  const rightElbowBend =
+    180 -
+    angleAt(spatialRight.shoulder, spatialRight.elbow, spatialRight.wrist);
+  const leftShoulderAngle = angleAt(
+    spatialLeft.elbow,
+    spatialLeft.shoulder,
+    spatialLeft.hip,
+  );
+  const rightShoulderAngle = angleAt(
+    spatialRight.elbow,
+    spatialRight.shoulder,
+    spatialRight.hip,
+  );
+  const leftHipAngle = angleAt(
+    spatialLeft.shoulder,
+    spatialLeft.hip,
+    spatialLeft.knee,
+  );
+  const rightHipAngle = angleAt(
+    spatialRight.shoulder,
+    spatialRight.hip,
+    spatialRight.knee,
+  );
   const bilateralDifference = average([
     Math.abs(leftKneeAngle - rightKneeAngle),
     Math.abs(leftElbowBend - rightElbowBend),
@@ -316,6 +372,7 @@ export function metricValue(metrics: PoseMetrics, key: MetricKey) {
 export function initialRepTracker(): RepTracker {
   return {
     phase: "ready",
+    armed: false,
     extremeValue: 0,
     maxCompensation: 0,
     startedAt: 0,
@@ -323,6 +380,7 @@ export function initialRepTracker(): RepTracker {
     cooldownUntil: 0,
     pendingTransition: null,
     pendingFrames: 0,
+    phaseEnteredAt: 0,
   };
 }
 
@@ -489,7 +547,34 @@ export function advanceProtocol(
     return { tracker };
   }
 
-  if (current.phase === "ready" && hasStarted(value, profile)) {
+  // A rep may only start after the neutral/returned position has been seen.
+  // This prevents a bent starting pose or a video beginning mid-rep from
+  // producing a false count.
+  if (
+    profile.mode === "rep" &&
+    current.phase === "ready" &&
+    !current.armed
+  ) {
+    if (!hasReturned(value, profile)) {
+      return { tracker: clearTransition(current) };
+    }
+    const confirmation = confirmTransition(current, "return");
+    if (!confirmation.confirmed) {
+      return { tracker: confirmation.tracker };
+    }
+    return {
+      tracker: {
+        ...clearTransition(confirmation.tracker),
+        armed: true,
+      },
+    };
+  }
+
+  if (
+    current.phase === "ready" &&
+    current.armed &&
+    hasStarted(value, profile)
+  ) {
     const confirmation = confirmTransition(current, "start");
     if (!confirmation.confirmed) {
       return { tracker: confirmation.tracker };
@@ -501,6 +586,7 @@ export function advanceProtocol(
         extremeValue: value,
         maxCompensation: compensation,
         startedAt: now,
+        phaseEnteredAt: now,
       },
     };
   }
@@ -517,6 +603,7 @@ export function advanceProtocol(
 
   if (
     current.phase === "moving" &&
+    now - current.phaseEnteredAt >= MIN_MOVEMENT_PHASE_MS &&
     hasReachedTarget(value, profile)
   ) {
     const confirmation = confirmTransition(tracker, "target");
@@ -527,11 +614,17 @@ export function advanceProtocol(
       tracker: {
         ...clearTransition(confirmation.tracker),
         phase: "target",
+        phaseEnteredAt: now,
       },
     };
   }
 
-  if (current.phase === "target" && hasReturned(value, profile)) {
+  if (
+    current.phase === "target" &&
+    now - current.phaseEnteredAt >= MIN_TARGET_PHASE_MS &&
+    now - current.startedAt >= MIN_COMPLETE_REP_MS &&
+    hasReturned(value, profile)
+  ) {
     const confirmation = confirmTransition(tracker, "return");
     if (!confirmation.confirmed) {
       return { tracker: confirmation.tracker };
@@ -540,6 +633,7 @@ export function advanceProtocol(
       tracker: {
         ...clearTransition(confirmation.tracker),
         phase: "returning",
+        phaseEnteredAt: now,
       },
     };
   }

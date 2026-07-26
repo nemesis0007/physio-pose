@@ -195,6 +195,7 @@ export function PhysioTwinApp() {
   const temporalFramesRef = useRef<PoseMetrics[]>([]);
   const insightRef = useRef<MovementInsight | null>(null);
   const lastRecognitionRef = useRef(0);
+  const recognitionCandidateRef = useRef({ id: "", confirmations: 0 });
 
   const [status, setStatus] = useState<SessionStatus>("idle");
   const [sourceMode, setSourceMode] = useState<SourceMode>(null);
@@ -361,7 +362,10 @@ export function PhysioTwinApp() {
   }, []);
 
   const analyzeLandmarks = useCallback(
-    (landmarks: NormalizedLandmark[]) => {
+    (
+      landmarks: NormalizedLandmark[],
+      worldLandmarks?: import("@mediapipe/tasks-vision").Landmark[],
+    ) => {
       const frameCheck = validatePoseFrame(landmarks);
       if (!frameCheck.valid) {
         stableFrameCountRef.current = 0;
@@ -372,7 +376,7 @@ export function PhysioTwinApp() {
         return;
       }
 
-      const rawMetrics = getPoseMetrics(landmarks);
+      const rawMetrics = getPoseMetrics(landmarks, worldLandmarks);
       if (!rawMetrics) return;
 
       const previousRaw = lastRawMetricsRef.current;
@@ -422,19 +426,27 @@ export function PhysioTwinApp() {
       if (
         autoRecognize &&
         nextInsight.detectionConfidence >= 0.84 &&
-        performance.now() - lastRecognitionRef.current > 1800
+        performance.now() - lastRecognitionRef.current > 900
       ) {
         const recognizedId = nextInsight.detectedExercise
           .toLowerCase()
           .replaceAll(" ", "-")
           .replace("…", "");
+        const previousCandidate = recognitionCandidateRef.current;
+        recognitionCandidateRef.current =
+          previousCandidate.id === recognizedId
+            ? { id: recognizedId, confirmations: previousCandidate.confirmations + 1 }
+            : { id: recognizedId, confirmations: 1 };
         if (
           recognizedId !== selectedExerciseId &&
+          recognitionCandidateRef.current.confirmations >= 3 &&
           EXERCISES.some((exercise) => exercise.id === recognizedId)
         ) {
           setSelectedExerciseId(recognizedId);
+          trackerRef.current = initialRepTracker();
+          recognitionCandidateRef.current = { id: "", confirmations: 0 };
           setMessage(
-            `Movement recognized as ${nextInsight.detectedExercise}. Protocol switched automatically.`,
+            `Movement repeatedly recognized as ${nextInsight.detectedExercise}. Protocol switched automatically.`,
           );
         }
         lastRecognitionRef.current = performance.now();
@@ -514,7 +526,7 @@ export function PhysioTwinApp() {
             radius: 3,
           });
           context.restore();
-          analyzeLandmarks(landmarks);
+          analyzeLandmarks(landmarks, result.worldLandmarks[0]);
         } else {
           setStatus("reposition");
         }
