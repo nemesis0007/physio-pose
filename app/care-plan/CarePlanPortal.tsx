@@ -13,6 +13,11 @@ const emptyPlan: CarePlanResponse = {
     bestScore: 0,
     completedAssignments: 0,
   },
+  details: {
+    exerciseBreakdown: [],
+    dailyActivity: [],
+    recentActivity: [],
+  },
 };
 
 function localDate(date = new Date()) {

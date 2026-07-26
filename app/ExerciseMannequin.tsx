@@ -66,6 +66,12 @@ type Retarget = {
 
 const DEG = Math.PI / 180;
 
+function realisticModelOffset(exerciseId: string) {
+  if (CHAIR_IDS.has(exerciseId)) return new THREE.Vector3(0, 0.03, 0.14);
+  if (exerciseId === "wall-slide") return new THREE.Vector3(0, 0, 0.08);
+  return new THREE.Vector3();
+}
+
 const STANDING: Pose = {
   rootY: 0,
   rootX: 0,
@@ -323,16 +329,18 @@ function exerciseKeyframes(exerciseId: string): [Pose, Pose] {
     case "pull-up":
       return [
         pose({
-          rootY: 0.16,
-          leftShoulderZ: -150,
-          rightShoulderZ: 150,
+          rootY: 0.2,
+          leftShoulderZ: -112,
+          rightShoulderZ: 112,
+          leftElbowZ: 8,
+          rightElbowZ: -8,
         }),
         pose({
-          rootY: 0.6,
-          leftShoulderZ: -145,
-          rightShoulderZ: 145,
-          leftElbowZ: 55,
-          rightElbowZ: -55,
+          rootY: 0.54,
+          leftShoulderZ: -105,
+          rightShoulderZ: 105,
+          leftElbowZ: 42,
+          rightElbowZ: -42,
         }),
       ];
     case "pelvic-tilt":
@@ -643,7 +651,9 @@ function createRig(scene: THREE.Scene): Rig {
     new THREE.BoxGeometry(1.2, 0.3, 0.78),
     material(0xf7c873),
   );
-  step.position.set(0, 0.15, -0.15);
+  // Keep the step in front of the planted foot. The realistic mesh has
+  // considerably more foot depth than the original procedural mannequin.
+  step.position.set(0, 0.15, 0.62);
   scene.add(step);
 
   const wall = new THREE.Mesh(
@@ -654,7 +664,7 @@ function createRig(scene: THREE.Scene): Rig {
       opacity: 0.35,
     }),
   );
-  wall.position.set(0, 1.45, 0.75);
+  wall.position.set(0, 1.45, -0.34);
   scene.add(wall);
 
   const mat = new THREE.Mesh(
@@ -670,7 +680,7 @@ function createRig(scene: THREE.Scene): Rig {
     material(0x9bb5bd, 0.4),
   );
   crossbar.rotation.z = Math.PI / 2;
-  crossbar.position.y = 3.2;
+  crossbar.position.set(0, 3.08, 0.04);
   bar.add(crossbar);
   for (const x of [-1.32, 1.32]) {
     const post = new THREE.Mesh(
@@ -1006,7 +1016,9 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
       const [from, to] = exerciseKeyframes(exerciseIdRef.current);
       applyPose(rig, interpolatePose(from, to, wave));
       if (realistic) {
-        realistic.pivot.position.copy(rig.root.position);
+        realistic.pivot.position
+          .copy(rig.root.position)
+          .add(realisticModelOffset(exerciseIdRef.current));
         realistic.pivot.rotation.copy(rig.root.rotation);
         realistic.pivot.updateMatrixWorld(true);
         retargetPose(realistic);

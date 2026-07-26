@@ -99,6 +99,18 @@ export async function GET(request: Request) {
     });
 
     const acceptedReps = events.filter((event) => event.accepted).length;
+    const exerciseGroups = new Map<string, typeof events>();
+    const dayGroups = new Map<string, typeof events>();
+    for (const event of events) {
+      exerciseGroups.set(event.exerciseId, [
+        ...(exerciseGroups.get(event.exerciseId) ?? []),
+        event,
+      ]);
+      dayGroups.set(event.activityDate, [
+        ...(dayGroups.get(event.activityDate) ?? []),
+        event,
+      ]);
+    }
     return json(request, {
       assignments: enriched,
       summary: {
@@ -111,6 +123,40 @@ export async function GET(request: Request) {
         completedAssignments: enriched.filter(
           (assignment) => assignment.acceptedReps >= assignment.targetReps,
         ).length,
+      },
+      details: {
+        exerciseBreakdown: Array.from(exerciseGroups.entries()).map(
+          ([exerciseId, matching]) => ({
+            exerciseId,
+            exerciseName: matching[0]?.exerciseName ?? exerciseId,
+            totalReps: matching.length,
+            acceptedReps: matching.filter((event) => event.accepted).length,
+            bestScore: matching.reduce(
+              (best, event) => Math.max(best, event.score),
+              0,
+            ),
+            lastActivity: matching[0]?.occurredAt ?? "",
+          }),
+        ),
+        dailyActivity: Array.from(dayGroups.entries())
+          .map(([date, matching]) => ({
+            date,
+            totalReps: matching.length,
+            acceptedReps: matching.filter((event) => event.accepted).length,
+            bestScore: matching.reduce(
+              (best, event) => Math.max(best, event.score),
+              0,
+            ),
+          }))
+          .sort((a, b) => b.date.localeCompare(a.date))
+          .slice(0, 14),
+        recentActivity: events.slice(0, 30).map((event) => ({
+          id: event.id,
+          exerciseName: event.exerciseName,
+          accepted: event.accepted,
+          score: event.score,
+          occurredAt: event.occurredAt,
+        })),
       },
     });
   } catch (error) {
