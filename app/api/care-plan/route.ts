@@ -1,6 +1,7 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { careAssignments, progressEvents } from "../../../db/schema";
+import { sessionUser } from "../auth/route";
 
 const patientPattern = /^[a-zA-Z0-9_-]{3,40}$/;
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -9,13 +10,15 @@ function corsHeaders(request: Request) {
   const origin = request.headers.get("origin") ?? "";
   const trustedPortal =
     origin === "http://localhost:3000" ||
+    origin === "http://localhost:3001" ||
     /^https:\/\/physiotwin-clinician\.[a-z0-9-]+\.chatgpt\.site$/.test(
       origin,
-    );
+    ) ||
+    /^https:\/\/physiotwin-clinician(?:-[a-z0-9-]+)?\.[a-z0-9-]+\.workers\.dev$/.test(origin);
   return {
     "access-control-allow-origin": trustedPortal ? origin : "null",
     "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
-    "access-control-allow-headers": "content-type",
+    "access-control-allow-headers": "authorization, content-type",
     vary: "Origin",
   };
 }
@@ -47,6 +50,8 @@ function safeInteger(value: unknown, minimum: number, maximum: number) {
 }
 
 export async function GET(request: Request) {
+  const user = await sessionUser(request);
+  if (!user) return json(request, { error: "Please sign in." }, { status: 401 });
   const patientId = new URL(request.url).searchParams.get("patientId")?.trim() ?? "";
   if (!validPatientId(patientId)) {
     return json(
@@ -54,6 +59,9 @@ export async function GET(request: Request) {
       { error: "Enter a valid patient profile ID." },
       { status: 400 },
     );
+  }
+  if (user.role === "patient" && user.username !== patientId.toLowerCase()) {
+    return json(request, { error: "You can only view your own care plan." }, { status: 403 });
   }
 
   try {
@@ -120,6 +128,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const user = await sessionUser(request);
+  if (!user) return json(request, { error: "Please sign in." }, { status: 401 });
   const payload = (await request.json()) as Record<string, unknown>;
   const action = safeText(payload.action, 20);
   const patientId = safeText(payload.patientId, 40);
@@ -136,7 +146,10 @@ export async function POST(request: Request) {
     const db = await getDb();
 
     if (action === "assign") {
-      const therapistName = safeText(payload.therapistName, 80);
+      if (user.role !== "physio") {
+        return json(request, { error: "Only a physiotherapist can assign exercises." }, { status: 403 });
+      }
+      const therapistName = user.displayName;
       const exerciseId = safeText(payload.exerciseId, 80);
       const exerciseName = safeText(payload.exerciseName, 120);
       const assignedDate = safeText(payload.assignedDate, 10);
@@ -173,6 +186,9 @@ export async function POST(request: Request) {
     }
 
     if (action === "progress") {
+      if (user.role !== "patient" || user.username !== patientId.toLowerCase()) {
+        return json(request, { error: "You can only record your own progress." }, { status: 403 });
+      }
       const exerciseId = safeText(payload.exerciseId, 80);
       const exerciseName = safeText(payload.exerciseName, 120);
       const activityDate = safeText(payload.activityDate, 10);
@@ -221,6 +237,11 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const user = await sessionUser(request);
+  if (!user) return json(request, { error: "Please sign in." }, { status: 401 });
+  if (user.role !== "physio") {
+    return json(request, { error: "Only a physiotherapist can remove assignments." }, { status: 403 });
+  }
   const url = new URL(request.url);
   const patientId = url.searchParams.get("patientId")?.trim() ?? "";
   const assignmentId = Number(url.searchParams.get("assignmentId"));

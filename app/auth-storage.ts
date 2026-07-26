@@ -1,92 +1,55 @@
-export type LocalProfile = {
+export type AuthUser = {
   username: string;
-  passwordHash: string;
-  salt: string;
-  createdAt: string;
+  displayName: string;
+  role: "patient" | "physio";
 };
 
-const USERS_KEY = "physiotwin-users";
-const SESSION_KEY = "physiotwin-session";
+type StoredSession = { token: string; user: AuthUser };
+const SESSION_KEY = "physiotwin-auth-session";
 
-function readUsers(): LocalProfile[] {
+export function currentSession(): StoredSession | null {
   try {
-    return JSON.parse(
-      window.localStorage.getItem(USERS_KEY) ?? "[]",
-    ) as LocalProfile[];
-  } catch {
-    return [];
-  }
-}
-
-async function digest(value: string) {
-  const bytes = new TextEncoder().encode(value);
-  const hash = await window.crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(hash))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-export function currentUsername() {
-  try {
-    return window.localStorage.getItem(SESSION_KEY);
+    return JSON.parse(window.localStorage.getItem(SESSION_KEY) ?? "null") as StoredSession | null;
   } catch {
     return null;
   }
 }
 
-export async function createLocalProfile(
-  usernameInput: string,
-  password: string,
-) {
-  const username = usernameInput.trim();
-  if (!/^[a-zA-Z0-9_-]{3,24}$/.test(username)) {
-    throw new Error(
-      "Use 3–24 letters, numbers, underscores or hyphens.",
-    );
-  }
-  if (password.length < 8) {
-    throw new Error("Use a password with at least 8 characters.");
-  }
-  const users = readUsers();
-  if (
-    users.some(
-      (user) => user.username.toLowerCase() === username.toLowerCase(),
-    )
-  ) {
-    throw new Error("That username already exists on this device.");
-  }
-
-  const saltBytes = window.crypto.getRandomValues(new Uint8Array(16));
-  const salt = Array.from(saltBytes)
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-  const profile: LocalProfile = {
-    username,
-    salt,
-    passwordHash: await digest(`${salt}:${password}`),
-    createdAt: new Date().toISOString(),
-  };
-  window.localStorage.setItem(USERS_KEY, JSON.stringify([...users, profile]));
-  window.localStorage.setItem(SESSION_KEY, username);
-  return profile;
+export function currentUsername() {
+  return currentSession()?.user.username ?? null;
 }
 
-export async function signInLocalProfile(
-  usernameInput: string,
-  password: string,
-) {
-  const user = readUsers().find(
-    (candidate) =>
-      candidate.username.toLowerCase() ===
-      usernameInput.trim().toLowerCase(),
-  );
-  if (!user || (await digest(`${user.salt}:${password}`)) !== user.passwordHash) {
-    throw new Error("Incorrect username or password.");
-  }
-  window.localStorage.setItem(SESSION_KEY, user.username);
-  return user;
+export function authHeaders() {
+  const token = currentSession()?.token;
+  const headers = new Headers();
+  if (token) headers.set("authorization", `Bearer ${token}`);
+  return headers;
+}
+
+async function authenticate(payload: Record<string, unknown>) {
+  const response = await fetch("/api/auth", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const result = (await response.json()) as StoredSession & { error?: string };
+  if (!response.ok) throw new Error(result.error ?? "Could not authenticate.");
+  window.localStorage.setItem(SESSION_KEY, JSON.stringify(result));
+  return result.user;
+}
+
+export async function createLocalProfile(username: string, password: string) {
+  return authenticate({ action: "register", role: "patient", username, password, displayName: username });
+}
+
+export async function signInLocalProfile(username: string, password: string) {
+  return authenticate({ action: "login", role: "patient", username, password });
 }
 
 export function signOutLocalProfile() {
+  const token = currentSession()?.token;
   window.localStorage.removeItem(SESSION_KEY);
+  if (token) {
+    void fetch("/api/auth", { method: "DELETE", headers: { authorization: `Bearer ${token}` } });
+  }
 }

@@ -81,9 +81,16 @@ export function recordExerciseActivity(
   );
   window.dispatchEvent(new Event(PROFILE_HISTORY_EVENT));
 
+  const storedSession = window.localStorage.getItem("physiotwin-auth-session");
+  const authToken = storedSession
+    ? (JSON.parse(storedSession) as { token?: string }).token
+    : undefined;
   void fetch("/api/care-plan", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(authToken ? { authorization: `Bearer ${authToken}` } : {}),
+    },
     body: JSON.stringify({
       action: "progress",
       patientId: profileId,

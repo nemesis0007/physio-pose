@@ -88,7 +88,7 @@ export function ProfileDashboard({
         <div>
           <p className="eyebrow">YOUR PHYSIOTWIN PROFILE</p>
           <h1>{displayName}</h1>
-          <p>Local private profile</p>
+          <p>Secure patient account</p>
         </div>
       </section>
 

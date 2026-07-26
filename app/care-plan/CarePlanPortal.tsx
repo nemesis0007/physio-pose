@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { currentUsername } from "../auth-storage";
+import { authHeaders, currentUsername } from "../auth-storage";
 import type { CareAssignment, CarePlanResponse } from "./types";
 
 const emptyPlan: CarePlanResponse = {
@@ -56,7 +56,7 @@ export function CarePlanPortal() {
     try {
       const response = await fetch(
         `/api/care-plan?patientId=${encodeURIComponent(profileId)}`,
-        { cache: "no-store" },
+        { cache: "no-store", headers: authHeaders() },
       );
       const payload = (await response.json()) as CarePlanResponse & {
         error?: string;

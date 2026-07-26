@@ -81,7 +81,7 @@ export function ProfilePortal() {
       </h1>
       <p>
         Your exercise calendar, repetitions and scores remain connected to
-        this private browser profile.
+        your secure PhysioTwin account.
       </p>
       <div className="login-tabs" aria-label="Account action">
         <button
@@ -138,7 +138,7 @@ export function ProfilePortal() {
               : "Create profile"}
         </button>
       </form>
-      <small>Credentials are stored only in this browser for the demo.</small>
+      <small>Your password is securely hashed and is never stored in this browser.</small>
     </section>
   );
 }
