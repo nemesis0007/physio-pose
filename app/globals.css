@@ -1626,6 +1626,27 @@ footer span { color: #737985; }
   font-size: 18px;
   line-height: 1.65;
 }
+.patient-plan-identity {
+  min-width: 220px;
+  padding: 18px 20px;
+  border: 1px solid #ffffff14;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #ffffff0d, #ffffff05);
+}
+.patient-plan-identity span,
+.patient-plan-identity strong { display: block; }
+.patient-plan-identity span {
+  color: #777f8b;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.patient-plan-identity strong {
+  margin-top: 7px;
+  color: #f7f8fb;
+}
+.patient-plan-empty { margin-top: 58px; }
 .care-mode-switch {
   flex: 0 0 auto;
   padding: 5px;

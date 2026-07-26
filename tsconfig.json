@@ -36,6 +36,7 @@
     "db",
     "drizzle",
     "examples",
+    "physio-portal",
     "worker",
     "vite.config.ts",
     "drizzle.config.ts"

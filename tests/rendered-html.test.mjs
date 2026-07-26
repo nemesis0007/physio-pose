@@ -90,10 +90,10 @@ test("server-renders the shared patient and physio care plan", async () => {
   assert.equal(response.status, 200);
 
   const html = await response.text();
-  assert.match(html, /CONNECTED HOME PROGRAMME/);
-  assert.match(html, /My daily plan/);
-  assert.match(html, /Physio workspace/);
-  assert.match(html, /patient’s profile ID/);
+  assert.match(html, /YOUR HOME PROGRAMME/);
+  assert.match(html, /Your plan, one day at a time/);
+  assert.doesNotMatch(html, /Physio workspace/);
+  assert.match(html, /profile ID connects completed reps/i);
 });
 
 test("defines a scoring profile for every exercise", async () => {

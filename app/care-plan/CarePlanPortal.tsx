@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { currentUsername } from "../auth-storage";
-import { EXERCISES } from "../exercise-data";
 import type { CareAssignment, CarePlanResponse } from "./types";
 
 const emptyPlan: CarePlanResponse = {
@@ -42,19 +41,10 @@ function statusLabel(assignment: CareAssignment) {
 }
 
 export function CarePlanPortal() {
-  const [mode, setMode] = useState<"patient" | "physio">("patient");
   const [username, setUsername] = useState<string | null>(null);
-  const [patientId, setPatientId] = useState("");
   const [plan, setPlan] = useState<CarePlanResponse>(emptyPlan);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [exerciseId, setExerciseId] = useState(EXERCISES[0].id);
-  const [assignedDate, setAssignedDate] = useState(localDate());
-  const [targetReps, setTargetReps] = useState(10);
-  const [notes, setNotes] = useState("");
-  const [therapistName, setTherapistName] = useState("Your physiotherapist");
 
   const loadPlan = useCallback(async (profileId: string) => {
     if (!/^[a-zA-Z0-9_-]{3,40}$/.test(profileId)) {
@@ -89,11 +79,7 @@ export function CarePlanPortal() {
     const timer = window.setTimeout(() => {
       const signedIn = currentUsername();
       setUsername(signedIn);
-      if (signedIn) {
-        setPatientId(signedIn);
-        setTherapistName(`${signedIn} — physiotherapist`);
-        void loadPlan(signedIn);
-      }
+      if (signedIn) void loadPlan(signedIn);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadPlan]);
@@ -120,74 +106,7 @@ export function CarePlanPortal() {
     [plan.assignments],
   );
 
-  async function assignExercise(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const exercise = EXERCISES.find((item) => item.id === exerciseId);
-    if (!exercise) return;
-    setSaving(true);
-    setError("");
-    setSuccess("");
-    try {
-      const response = await fetch("/api/care-plan", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "assign",
-          patientId,
-          therapistName,
-          exerciseId: exercise.id,
-          exerciseName: exercise.name,
-          assignedDate,
-          targetReps,
-          notes,
-        }),
-      });
-      const payload = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Could not assign exercise.");
-      }
-      setNotes("");
-      setSuccess(`${exercise.name} added to ${patientId}'s plan.`);
-      await loadPlan(patientId);
-    } catch (problem) {
-      setError(
-        problem instanceof Error
-          ? problem.message
-          : "Could not assign exercise.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function removeAssignment(assignmentId: number) {
-    setSaving(true);
-    setError("");
-    try {
-      const response = await fetch(
-        `/api/care-plan?patientId=${encodeURIComponent(patientId)}&assignmentId=${assignmentId}`,
-        { method: "DELETE" },
-      );
-      const payload = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Could not remove assignment.");
-      }
-      await loadPlan(patientId);
-    } catch (problem) {
-      setError(
-        problem instanceof Error
-          ? problem.message
-          : "Could not remove assignment.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function assignmentCard(
-    assignment: CareAssignment,
-    options?: { removable?: boolean },
-  ) {
+  function assignmentCard(assignment: CareAssignment) {
     const progress = Math.min(
       100,
       Math.round((assignment.acceptedReps / assignment.targetReps) * 100),
@@ -200,7 +119,9 @@ export function CarePlanPortal() {
             <span>{displayDate(assignment.assignedDate)}</span>
             <h3>{assignment.exerciseName}</h3>
           </div>
-          <strong className={`care-status care-status-${status.toLowerCase().replace(" ", "-")}`}>
+          <strong
+            className={`care-status care-status-${status.toLowerCase().replace(" ", "-")}`}
+          >
             {status}
           </strong>
         </div>
@@ -237,15 +158,6 @@ export function CarePlanPortal() {
           <Link href={`/?exercise=${assignment.exerciseId}#exercise-demo`}>
             Start exercise
           </Link>
-          {options?.removable ? (
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void removeAssignment(assignment.id)}
-            >
-              Remove
-            </button>
-          ) : null}
         </div>
       </article>
     );
@@ -255,259 +167,106 @@ export function CarePlanPortal() {
     <>
       <section className="care-plan-hero">
         <div>
-          <p className="eyebrow">CONNECTED HOME PROGRAMME</p>
+          <p className="eyebrow">YOUR HOME PROGRAMME</p>
           <h1>Your plan, one day at a time.</h1>
           <p>
-            Physiotherapists can schedule exercises and review accepted reps,
-            while patients always know what to complete next.
+            See what your physiotherapist assigned, complete each exercise with
+            live movement feedback, and keep your progress up to date.
           </p>
         </div>
-        <div className="care-mode-switch" aria-label="Choose workspace">
-          <button
-            className={mode === "patient" ? "active" : ""}
-            type="button"
-            onClick={() => {
-              setMode("patient");
-              if (username) {
-                setPatientId(username);
-                void loadPlan(username);
-              }
-            }}
-          >
-            My daily plan
-          </button>
-          <button
-            className={mode === "physio" ? "active" : ""}
-            type="button"
-            onClick={() => setMode("physio")}
-          >
-            Physio workspace
-          </button>
-        </div>
+        {username ? (
+          <div className="patient-plan-identity">
+            <span>Patient profile</span>
+            <strong>{username}</strong>
+          </div>
+        ) : null}
       </section>
 
       {error ? <p className="care-alert care-alert-error">{error}</p> : null}
-      {success ? <p className="care-alert care-alert-success">{success}</p> : null}
 
-      {mode === "patient" ? (
-        !username ? (
-          <section className="care-empty">
-            <strong>Sign in to open your assigned programme.</strong>
-            <p>Your profile ID connects completed reps to your daily plan.</p>
-            <Link href="/profile">Open profile</Link>
-          </section>
-        ) : (
-          <section className="care-patient-workspace">
-            <div className="care-summary-grid" aria-label="Plan summary">
-              <article>
-                <span>Today</span>
-                <strong>{todayAssignments.length}</strong>
-                <p>assigned exercises</p>
-              </article>
-              <article>
-                <span>Accepted reps</span>
-                <strong>{plan.summary.acceptedReps}</strong>
-                <p>visible to your physio</p>
-              </article>
-              <article>
-                <span>Completed</span>
-                <strong>{plan.summary.completedAssignments}</strong>
-                <p>daily assignments</p>
-              </article>
-              <article>
-                <span>Best score</span>
-                <strong>{plan.summary.bestScore || "—"}</strong>
-                <p>across synced sessions</p>
-              </article>
-            </div>
-
-            <div className="care-section-heading">
-              <div>
-                <p className="eyebrow">TODAY</p>
-                <h2>Your next exercises.</h2>
-              </div>
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => void loadPlan(username)}
-              >
-                {loading ? "Refreshing…" : "Refresh progress"}
-              </button>
-            </div>
-            {todayAssignments.length ? (
-              <div className="care-assignment-grid">
-                {todayAssignments.map((assignment) =>
-                  assignmentCard(assignment),
-                )}
-              </div>
-            ) : (
-              <div className="care-empty">
-                <strong>No exercise is assigned for today.</strong>
-                <p>Your physiotherapist’s next assignment will appear here.</p>
-              </div>
-            )}
-
-            {upcomingAssignments.length ? (
-              <>
-                <div className="care-section-heading care-subheading">
-                  <div>
-                    <p className="eyebrow">UPCOMING</p>
-                    <h2>Plan ahead.</h2>
-                  </div>
-                </div>
-                <div className="care-assignment-grid">
-                  {upcomingAssignments.map((assignment) =>
-                    assignmentCard(assignment),
-                  )}
-                </div>
-              </>
-            ) : null}
-
-            {recentAssignments.length ? (
-              <details className="care-previous">
-                <summary>Previous assignments</summary>
-                <div className="care-assignment-grid">
-                  {recentAssignments.map((assignment) =>
-                    assignmentCard(assignment),
-                  )}
-                </div>
-              </details>
-            ) : null}
-          </section>
-        )
+      {!username ? (
+        <section className="care-empty patient-plan-empty">
+          <strong>Sign in to open your assigned programme.</strong>
+          <p>Your profile ID connects completed reps to your daily plan.</p>
+          <Link href="/profile">Open profile</Link>
+        </section>
       ) : (
-        <section className="care-physio-workspace">
-          <div className="care-physio-toolbar">
-            <label>
-              Patient profile ID
-              <span>
-                <input
-                  value={patientId}
-                  onChange={(event) => setPatientId(event.target.value)}
-                  placeholder="patient_username"
-                />
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => void loadPlan(patientId)}
-                >
-                  View progress
-                </button>
-              </span>
-            </label>
+        <section className="care-patient-workspace">
+          <div className="care-summary-grid" aria-label="Plan summary">
+            <article>
+              <span>Today</span>
+              <strong>{todayAssignments.length}</strong>
+              <p>assigned exercises</p>
+            </article>
+            <article>
+              <span>Accepted reps</span>
+              <strong>{plan.summary.acceptedReps}</strong>
+              <p>shared with your physio</p>
+            </article>
+            <article>
+              <span>Completed</span>
+              <strong>{plan.summary.completedAssignments}</strong>
+              <p>daily assignments</p>
+            </article>
+            <article>
+              <span>Best score</span>
+              <strong>{plan.summary.bestScore || "—"}</strong>
+              <p>across synced sessions</p>
+            </article>
+          </div>
+
+          <div className="care-section-heading">
             <div>
-              <span>Connected record</span>
-              <strong>{patientId || "No patient selected"}</strong>
-              <small>
-                Shared measurements only. Raw camera video remains on-device.
-              </small>
+              <p className="eyebrow">TODAY</p>
+              <h2>Your next exercises.</h2>
             </div>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void loadPlan(username)}
+            >
+              {loading ? "Refreshing…" : "Refresh progress"}
+            </button>
           </div>
-
-          <div className="care-physio-layout">
-            <form className="care-assign-form" onSubmit={assignExercise}>
-              <p className="eyebrow">NEW ASSIGNMENT</p>
-              <h2>Add to the daily plan.</h2>
-              <label>
-                Your name
-                <input
-                  value={therapistName}
-                  onChange={(event) => setTherapistName(event.target.value)}
-                  required
-                />
-              </label>
-              <label>
-                Exercise
-                <select
-                  value={exerciseId}
-                  onChange={(event) => setExerciseId(event.target.value)}
-                >
-                  {EXERCISES.map((exercise) => (
-                    <option key={exercise.id} value={exercise.id}>
-                      {exercise.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="care-form-row">
-                <label>
-                  Date
-                  <input
-                    type="date"
-                    value={assignedDate}
-                    onChange={(event) => setAssignedDate(event.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  Target reps
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={targetReps}
-                    onChange={(event) =>
-                      setTargetReps(Number(event.target.value))
-                    }
-                    required
-                  />
-                </label>
-              </div>
-              <label>
-                Patient note
-                <textarea
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                  placeholder="Example: Keep the chest tall and use the chair for support."
-                  rows={4}
-                />
-              </label>
-              <button disabled={saving || !patientId} type="submit">
-                {saving ? "Saving…" : "Assign exercise"}
-              </button>
-            </form>
-
-            <div className="care-patient-review">
-              <div className="care-section-heading">
-                <div>
-                  <p className="eyebrow">PATIENT PROGRESS</p>
-                  <h2>{patientId || "Select a patient."}</h2>
-                </div>
-              </div>
-              <div className="care-review-stats">
-                <div>
-                  <span>Total reps</span>
-                  <strong>{plan.summary.totalReps}</strong>
-                </div>
-                <div>
-                  <span>Accepted</span>
-                  <strong>{plan.summary.acceptedReps}</strong>
-                </div>
-                <div>
-                  <span>Best</span>
-                  <strong>{plan.summary.bestScore || "—"}</strong>
-                </div>
-              </div>
-              {plan.assignments.length ? (
-                <div className="care-assignment-grid care-review-list">
-                  {plan.assignments.map((assignment) =>
-                    assignmentCard(assignment, { removable: true }),
-                  )}
-                </div>
-              ) : (
-                <div className="care-empty">
-                  <strong>No shared assignments yet.</strong>
-                  <p>Add the first exercise using the form.</p>
-                </div>
-              )}
+          {todayAssignments.length ? (
+            <div className="care-assignment-grid">
+              {todayAssignments.map(assignmentCard)}
             </div>
-          </div>
+          ) : (
+            <div className="care-empty">
+              <strong>No exercise is assigned for today.</strong>
+              <p>Your physiotherapist’s next assignment will appear here.</p>
+            </div>
+          )}
+
+          {upcomingAssignments.length ? (
+            <>
+              <div className="care-section-heading care-subheading">
+                <div>
+                  <p className="eyebrow">UPCOMING</p>
+                  <h2>Plan ahead.</h2>
+                </div>
+              </div>
+              <div className="care-assignment-grid">
+                {upcomingAssignments.map(assignmentCard)}
+              </div>
+            </>
+          ) : null}
+
+          {recentAssignments.length ? (
+            <details className="care-previous">
+              <summary>Previous assignments</summary>
+              <div className="care-assignment-grid">
+                {recentAssignments.map(assignmentCard)}
+              </div>
+            </details>
+          ) : null}
         </section>
       )}
 
       <p className="care-prototype-note">
-        Prototype access uses the patient’s profile ID. A production clinical
-        rollout requires verified patient–physio accounts and consent controls.
+        Your assessment video stays on this device. Only rep measurements,
+        scores and care-plan progress are shared.
       </p>
     </>
   );

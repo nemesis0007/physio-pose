@@ -5,6 +5,33 @@ import { careAssignments, progressEvents } from "../../../db/schema";
 const patientPattern = /^[a-zA-Z0-9_-]{3,40}$/;
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 
+function corsHeaders(request: Request) {
+  const origin = request.headers.get("origin") ?? "";
+  const trustedPortal =
+    origin === "http://localhost:3000" ||
+    /^https:\/\/physiotwin-clinician\.[a-z0-9-]+\.chatgpt\.site$/.test(
+      origin,
+    );
+  return {
+    "access-control-allow-origin": trustedPortal ? origin : "null",
+    "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+    "access-control-allow-headers": "content-type",
+    vary: "Origin",
+  };
+}
+
+function json(
+  request: Request,
+  data: unknown,
+  init: ResponseInit = {},
+) {
+  const headers = new Headers(init.headers);
+  Object.entries(corsHeaders(request)).forEach(([key, value]) =>
+    headers.set(key, value),
+  );
+  return Response.json(data, { ...init, headers });
+}
+
 function validPatientId(value: string) {
   return patientPattern.test(value);
 }
@@ -22,7 +49,8 @@ function safeInteger(value: unknown, minimum: number, maximum: number) {
 export async function GET(request: Request) {
   const patientId = new URL(request.url).searchParams.get("patientId")?.trim() ?? "";
   if (!validPatientId(patientId)) {
-    return Response.json(
+    return json(
+      request,
       { error: "Enter a valid patient profile ID." },
       { status: 400 },
     );
@@ -63,7 +91,7 @@ export async function GET(request: Request) {
     });
 
     const acceptedReps = events.filter((event) => event.accepted).length;
-    return Response.json({
+    return json(request, {
       assignments: enriched,
       summary: {
         totalReps: events.length,
@@ -78,7 +106,8 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    return Response.json(
+    return json(
+      request,
       {
         error:
           error instanceof Error
@@ -96,7 +125,8 @@ export async function POST(request: Request) {
   const patientId = safeText(payload.patientId, 40);
 
   if (!validPatientId(patientId)) {
-    return Response.json(
+    return json(
+      request,
       { error: "Enter a valid patient profile ID." },
       { status: 400 },
     );
@@ -120,7 +150,8 @@ export async function POST(request: Request) {
         !datePattern.test(assignedDate) ||
         targetReps === null
       ) {
-        return Response.json(
+        return json(
+          request,
           { error: "Complete the exercise, date and target fields." },
           { status: 400 },
         );
@@ -138,7 +169,7 @@ export async function POST(request: Request) {
           notes,
         })
         .returning();
-      return Response.json({ assignment }, { status: 201 });
+      return json(request, { assignment }, { status: 201 });
     }
 
     if (action === "progress") {
@@ -155,7 +186,8 @@ export async function POST(request: Request) {
         score === null ||
         !occurredAt
       ) {
-        return Response.json(
+        return json(
+          request,
           { error: "The progress event is incomplete." },
           { status: 400 },
         );
@@ -170,12 +202,13 @@ export async function POST(request: Request) {
         score,
         occurredAt,
       });
-      return Response.json({ recorded: true }, { status: 201 });
+      return json(request, { recorded: true }, { status: 201 });
     }
 
-    return Response.json({ error: "Unknown action." }, { status: 400 });
+    return json(request, { error: "Unknown action." }, { status: 400 });
   } catch (error) {
-    return Response.json(
+    return json(
+      request,
       {
         error:
           error instanceof Error
@@ -192,7 +225,7 @@ export async function DELETE(request: Request) {
   const patientId = url.searchParams.get("patientId")?.trim() ?? "";
   const assignmentId = Number(url.searchParams.get("assignmentId"));
   if (!validPatientId(patientId) || !Number.isInteger(assignmentId)) {
-    return Response.json({ error: "Invalid assignment." }, { status: 400 });
+    return json(request, { error: "Invalid assignment." }, { status: 400 });
   }
 
   try {
@@ -205,9 +238,10 @@ export async function DELETE(request: Request) {
           eq(careAssignments.patientId, patientId),
         ),
       );
-    return Response.json({ removed: true });
+    return json(request, { removed: true });
   } catch (error) {
-    return Response.json(
+    return json(
+      request,
       {
         error:
           error instanceof Error
@@ -217,4 +251,8 @@ export async function DELETE(request: Request) {
       { status: 500 },
     );
   }
+}
+
+export async function OPTIONS(request: Request) {
+  return new Response(null, { status: 204, headers: corsHeaders(request) });
 }
