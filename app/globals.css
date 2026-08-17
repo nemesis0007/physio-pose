@@ -1013,10 +1013,10 @@ body {
   z-index: 4;
   top: 16px;
   right: 16px;
-  min-width: 185px;
+  min-width: 210px;
   padding: 11px 14px;
   display: grid;
-  grid-template-columns: 54px 1fr;
+  grid-template-columns: 74px 1fr;
   gap: 14px;
   border: 1px solid #ffffff20;
   border-radius: 18px;
@@ -1038,7 +1038,7 @@ body {
   color: white;
   font-size: 19px;
 }
-.live-rep-hud > div:first-child strong { font-size: 27px; line-height: .9; }
+.live-rep-hud > div:first-child strong { font-size: 23px; line-height: .9; }
 .live-rep-hud strong.hud-pass { color: #52df8b; }
 .live-rep-hud strong.hud-retry { color: #ff7c80; }
 .live-results-dock {
@@ -1085,6 +1085,22 @@ body {
   margin-top: 6px;
   color: #f7f8fb;
   font-size: 14px;
+}
+.goal-progress {
+  width: min(190px, 100%);
+  height: 4px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #ffffff12;
+}
+.goal-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6e98ff, #4bdf91);
+  box-shadow: 0 0 14px #4bdf9166;
+  transition: width 220ms ease;
 }
 .dock-stat,
 .dock-cue { border-left: 1px solid #ffffff10; }
@@ -2329,7 +2345,7 @@ footer span { color: #737985; }
   margin: 14px 0 0;
   padding-top: 14px;
   display: grid;
-  grid-template-columns: .8fr 1fr 1.45fr;
+  grid-template-columns: .75fr .95fr .8fr 1.35fr;
   gap: 12px;
   border-top: 1px solid #ffffff0d;
 }
@@ -2338,6 +2354,34 @@ footer span { color: #737985; }
   color: #c9cdd5;
   font-size: 11px;
   line-height: 1.35;
+}
+.session-plan dd.session-target {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.session-target input {
+  width: 52px;
+  min-height: 34px;
+  padding: 4px 7px;
+  border: 1px solid #ffffff1c;
+  border-radius: 9px;
+  outline: 0;
+  color: #f7f8fb;
+  background: #090b10c7;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 760;
+}
+.session-target input:focus {
+  border-color: #729eff;
+  box-shadow: 0 0 0 3px #729eff1e;
+}
+.session-plan dl > div > small {
+  display: block;
+  margin-top: 5px;
+  color: #6f87ba;
+  font-size: 9px;
 }
 .camera-stage video {
   z-index: 1;
@@ -2437,7 +2481,7 @@ footer span { color: #737985; }
   .session-plan-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
   .session-plan-heading strong { max-width: 100%; }
   .session-plan dl { grid-template-columns: 1fr 1fr; }
-  .session-plan dl > div:last-child { grid-column: 1 / -1; }
+  .session-plan dl > div:last-child { grid-column: auto; }
   .intelligence-controls button,
   .intelligence-controls label { min-height: 46px; }
   .live-card {

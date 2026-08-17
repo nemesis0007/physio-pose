@@ -135,7 +135,7 @@ const STATUS_COPY: Record<SessionStatus, string> = {
   loading: "Loading the on-device pose model...",
   tracking: "Pose found — movement tracking active",
   reposition: "Reposition so the full body is visible",
-  complete: "Video complete — review the measurements below",
+  complete: "Session complete — review the measurements below",
   pain: "Session paused — do not continue through pain",
   error: "Video source could not start",
 };
@@ -324,8 +324,12 @@ export function PhysioTwinApp() {
   const insightRef = useRef<MovementInsight | null>(null);
   const lastRecognitionRef = useRef(0);
   const recognitionCandidateRef = useRef({ id: "", confirmations: 0 });
+  const goalCompletedRef = useRef(false);
 
   const [status, setStatus] = useState<SessionStatus>("idle");
+  const [completionReason, setCompletionReason] = useState<
+    "goal" | "video" | null
+  >(null);
   const [sourceMode, setSourceMode] = useState<SourceMode>(null);
   const [trackingProfile, setTrackingProfile] = useState<"lite" | "full">(
     "full",
@@ -339,6 +343,8 @@ export function PhysioTwinApp() {
   const [selectedExerciseId, setSelectedExerciseId] = useState(
     "chair-sit-to-stand",
   );
+  const [targetReps, setTargetReps] = useState(10);
+  const [planAcceptedReps, setPlanAcceptedReps] = useState(0);
   const [calibration, setCalibration] =
     useState<CalibrationProfile | null>(null);
   const [autoRecognize, setAutoRecognize] = useState(true);
@@ -363,11 +369,30 @@ export function PhysioTwinApp() {
   }, []);
 
   useEffect(() => {
-    const query = new URLSearchParams(window.location.search).get("exercise");
-    if (query && EXERCISES.some((exercise) => exercise.id === query)) {
-      const timer = window.setTimeout(() => setSelectedExerciseId(query), 0);
-      return () => window.clearTimeout(timer);
-    }
+    const params = new URLSearchParams(window.location.search);
+    const exerciseId = params.get("exercise");
+    const requestedTarget = Number(params.get("targetReps"));
+    const previouslyAccepted = Number(params.get("completedReps"));
+    const timer = window.setTimeout(() => {
+      if (
+        exerciseId &&
+        EXERCISES.some((exercise) => exercise.id === exerciseId)
+      ) {
+        setSelectedExerciseId(exerciseId);
+      }
+      if (Number.isFinite(requestedTarget) && requestedTarget > 0) {
+        const nextTarget = Math.min(100, Math.max(1, Math.round(requestedTarget)));
+        setTargetReps(nextTarget);
+        if (
+          Number.isFinite(previouslyAccepted) &&
+          previouslyAccepted > 0 &&
+          previouslyAccepted < nextTarget
+        ) {
+          setPlanAcceptedReps(Math.floor(previouslyAccepted));
+        }
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -811,7 +836,9 @@ export function PhysioTwinApp() {
     temporalFramesRef.current = [];
     insightRef.current = null;
     sessionStartedAtRef.current = new Date();
+    goalCompletedRef.current = false;
     setPhase("ready");
+    setCompletionReason(null);
     setMetrics(null);
     setReps([]);
     setCloudScore(null);
@@ -943,6 +970,7 @@ export function PhysioTwinApp() {
       cancelAnimationFrame(animationRef.current);
     }
     animationRef.current = null;
+    setCompletionReason("video");
     setStatus("complete");
     setMessage(
       "Video complete. Review the heuristic scores and traceable reasons below.",
@@ -1007,9 +1035,6 @@ export function PhysioTwinApp() {
 
     const chronologicalReps = [...reps].reverse();
     const accepted = chronologicalReps.filter((rep) => rep.accepted).length;
-    const acceptanceRate = Math.round(
-      (accepted / chronologicalReps.length) * 100,
-    );
     const generatedAt = new Date();
     const rows = chronologicalReps
       .map(
@@ -1072,7 +1097,7 @@ export function PhysioTwinApp() {
           </section>
           <section class="summary">
             <div class="box"><span>Accepted attempts</span><strong>${accepted}/${chronologicalReps.length}</strong></div>
-            <div class="box"><span>Acceptance rate</span><strong>${acceptanceRate}%</strong></div>
+            <div class="box"><span>Goal progress</span><strong>${Math.min(targetReps, planAcceptedReps + accepted)}/${targetReps}</strong></div>
             <div class="box"><span>Review flags</span><strong>${chronologicalReps.length - accepted}</strong></div>
           </section>
           <h2>Attempt details</h2>
@@ -1105,7 +1130,14 @@ export function PhysioTwinApp() {
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
-  }, [reps, selectedExercise.id, selectedExercise.name, trackingProfile]);
+  }, [
+    planAcceptedReps,
+    reps,
+    selectedExercise.id,
+    selectedExercise.name,
+    targetReps,
+    trackingProfile,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -1114,11 +1146,37 @@ export function PhysioTwinApp() {
     };
   }, [stopSource]);
 
+  const localAcceptedCount = reps.filter((rep) => rep.accepted).length;
+  const goalAcceptedCount = Math.min(
+    targetReps,
+    planAcceptedReps + localAcceptedCount,
+  );
+  const remainingGoalReps = Math.max(0, targetReps - goalAcceptedCount);
+  const goalProgress = Math.round((goalAcceptedCount / targetReps) * 100);
+
+  useEffect(() => {
+    if (
+      goalCompletedRef.current ||
+      !sourceActiveRef.current ||
+      goalAcceptedCount < targetReps
+    ) {
+      return;
+    }
+
+    goalCompletedRef.current = true;
+    stopSource();
+    setCompletionReason("goal");
+    setStatus("complete");
+    setMessage(
+      `Goal reached — ${targetReps} accepted reps complete. Review your session below.`,
+    );
+    speak("Goal reached. Session complete.");
+  }, [goalAcceptedCount, speak, stopSource, targetReps]);
+
   const currentCloudScore =
     cloudScore?.totalReps === reps.length ? cloudScore : null;
   const acceptedCount =
-    currentCloudScore?.acceptedReps ??
-    reps.filter((rep) => rep.accepted).length;
+    currentCloudScore?.acceptedReps ?? localAcceptedCount;
   const qualityRate =
     currentCloudScore?.acceptanceRate ??
     (reps.length ? Math.round((acceptedCount / reps.length) * 100) : 0);
@@ -1140,9 +1198,7 @@ export function PhysioTwinApp() {
         )
       : Math.round(insight.symmetry));
   const sourceActive =
-    status === "tracking" ||
-    status === "reposition" ||
-    status === "complete";
+    status === "tracking" || status === "reposition";
 
   return (
     <main className="shell">
@@ -1177,6 +1233,7 @@ export function PhysioTwinApp() {
                 prepareSession();
                 setStatus("idle");
                 setSelectedExerciseId(event.target.value);
+                setPlanAcceptedReps(0);
                 setMessage(
                   "Protocol ready. Use the recommended camera view for the clearest movement score.",
                 );
@@ -1205,6 +1262,32 @@ export function PhysioTwinApp() {
               <div>
                 <dt>Prepare</dt>
                 <dd>{selectedExercise.equipment}</dd>
+              </div>
+              <div>
+                <dt>Accepted rep goal</dt>
+                <dd className="session-target">
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    inputMode="numeric"
+                    aria-label="Accepted repetition goal"
+                    value={targetReps}
+                    onChange={(event) => {
+                      const nextTarget = Number(event.target.value);
+                      if (!Number.isFinite(nextTarget)) return;
+                      setTargetReps(
+                        Math.min(100, Math.max(1, Math.round(nextTarget))),
+                      );
+                      setPlanAcceptedReps(0);
+                      goalCompletedRef.current = false;
+                    }}
+                  />
+                  <span>reps</span>
+                </dd>
+                {planAcceptedReps > 0 ? (
+                  <small>{planAcceptedReps} already logged</small>
+                ) : null}
               </div>
               <div>
                 <dt>Focus</dt>
@@ -1317,14 +1400,20 @@ export function PhysioTwinApp() {
                 <strong>
                   {status === "loading"
                     ? "Preparing a clear camera preview…"
+                    : status === "complete"
+                      ? completionReason === "goal"
+                        ? "Session goal complete"
+                        : "Video review ready"
                     : "Your private movement space"}
                 </strong>
                 <span>
                   {status === "loading"
                     ? "The session starts after the first video frame is ready"
+                    : status === "complete"
+                      ? `${goalAcceptedCount} of ${targetReps} accepted reps ${completionReason === "goal" ? "reached" : "recorded"}`
                     : "Live video is processed locally in this browser"}
                 </span>
-                {status !== "loading" && (
+                {status !== "loading" && status !== "complete" && (
                   <div className="camera-ready-card">
                     <small>BEFORE YOU BEGIN</small>
                     <ul>
@@ -1341,6 +1430,10 @@ export function PhysioTwinApp() {
                 ? PHASE_COPY[phase]
                 : status === "loading"
                   ? "Preparing camera"
+                  : status === "complete"
+                    ? completionReason === "goal"
+                      ? "Goal reached"
+                      : "Video complete"
                   : "Awaiting session"}
             </div>
             <div className={`quality-badge ${insight.readiness}`}>
@@ -1351,8 +1444,10 @@ export function PhysioTwinApp() {
             </div>
             <div className="live-rep-hud" aria-live="polite">
               <div>
-                <span>REPS</span>
-                <strong>{reps.length}</strong>
+                <span>GOAL</span>
+                <strong>
+                  {goalAcceptedCount}/{targetReps}
+                </strong>
               </div>
               <div>
                 <span>LAST RESULT</span>
@@ -1439,14 +1534,22 @@ export function PhysioTwinApp() {
         <div className="dock-heading">
           <span className={`status-light ${status}`} />
           <div>
-            <small>LIVE SESSION</small>
+            <small>SESSION GOAL</small>
             <strong>
-              {reps[0]
-                ? reps[0].accepted
-                  ? `Rep ${reps[0].id} counted`
-                  : `Rep ${reps[0].id} needs another try`
-                : "Your rep result will appear here"}
+              {remainingGoalReps === 0
+                ? "Target complete"
+                : `${remainingGoalReps} accepted ${remainingGoalReps === 1 ? "rep" : "reps"} to go`}
             </strong>
+            <div
+              className="goal-progress"
+              role="progressbar"
+              aria-label="Accepted repetition goal progress"
+              aria-valuemin={0}
+              aria-valuemax={targetReps}
+              aria-valuenow={goalAcceptedCount}
+            >
+              <i style={{ width: `${goalProgress}%` }} />
+            </div>
           </div>
         </div>
         <div className="dock-stat">

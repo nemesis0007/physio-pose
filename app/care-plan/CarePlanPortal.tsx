@@ -117,6 +117,10 @@ export function CarePlanPortal() {
       Math.round((assignment.acceptedReps / assignment.targetReps) * 100),
     );
     const status = statusLabel(assignment);
+    const carriedProgress =
+      assignment.acceptedReps < assignment.targetReps
+        ? assignment.acceptedReps
+        : 0;
     return (
       <article className="care-assignment-card" key={assignment.id}>
         <div className="care-assignment-top">
@@ -160,8 +164,10 @@ export function CarePlanPortal() {
           </div>
         </dl>
         <div className="care-card-actions">
-          <Link href={`/?exercise=${assignment.exerciseId}#exercise-demo`}>
-            Start exercise
+          <Link
+            href={`/?exercise=${encodeURIComponent(assignment.exerciseId)}&targetReps=${assignment.targetReps}&completedReps=${carriedProgress}#top`}
+          >
+            {carriedProgress > 0 ? "Continue exercise" : "Start exercise"}
           </Link>
         </div>
       </article>

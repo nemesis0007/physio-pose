@@ -58,6 +58,7 @@ test("server-renders the video assessment product", async () => {
   assert.match(html, /accept="video\/mp4,video\/webm,video\/quicktime,video\/\*"/);
   assert.match(html, /Video never leaves this device/);
   assert.match(html, /Chair sit-to-stand/);
+  assert.match(html, /Accepted rep goal/);
   assert.match(html, /Transparent scoring/);
   assert.match(html, /Anonymous movement measurements are scored by Cloudflare/);
   assert.match(html, /INTERACTIVE 3D MOVEMENT GUIDE/);
@@ -116,6 +117,24 @@ test("server-renders the shared patient and physio care plan", async () => {
   assert.match(html, /Your plan, one day at a time/);
   assert.doesNotMatch(html, /Physio workspace/);
   assert.match(html, /profile ID connects completed reps/i);
+});
+
+test("carries prescribed progress into a goal-completing assessment", async () => {
+  const [carePlanSource, assessmentSource] = await Promise.all([
+    readFile(new URL("../app/care-plan/CarePlanPortal.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/PhysioTwinApp.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.ok(
+    carePlanSource.includes(
+      "&targetReps=${assignment.targetReps}&completedReps=${carriedProgress}#top",
+    ),
+  );
+  assert.match(assessmentSource, /goalAcceptedCount < targetReps/);
+  assert.match(
+    assessmentSource,
+    /stopSource\(\);[\s\S]{0,120}setStatus\("complete"\)/,
+  );
 });
 
 test("calculates anonymized session scores in the Cloudflare route", async () => {
