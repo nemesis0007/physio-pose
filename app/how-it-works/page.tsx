@@ -24,8 +24,8 @@ const PROCESS = [
   },
   {
     step: "05",
-    title: "Apply protocol rules",
-    body: "The selected exercise profile checks its primary range plus a visible compensation measure. These hackathon thresholds are transparent and designed to be replaced by clinician-approved values.",
+    title: "Score in Cloudflare",
+    body: "The browser sends only anonymous repetition measurements—not video—to a Cloudflare Worker, which calculates session quality, symmetry, trends and the coaching focus.",
   },
   {
     step: "06",
@@ -44,9 +44,9 @@ export default function HowItWorksPage() {
           Intelligence that learns <em>how movement changes.</em>
         </h1>
         <p>
-          PhysioTwin combines 33-point pose estimation, temporal movement
-          features, automatic exercise recognition and trainable form
-          classification in one on-device pipeline.
+          PhysioTwin combines private on-device pose estimation with Cloudflare
+          session scoring: video stays in the browser while anonymous movement
+          measurements become a clinician-ready summary in the cloud.
         </p>
       </section>
 

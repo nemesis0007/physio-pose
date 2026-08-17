@@ -931,7 +931,10 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
       antialias: true,
       powerPreference: "high-performance",
     });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const phoneSized = window.matchMedia("(max-width: 820px)").matches;
+    renderer.setPixelRatio(
+      Math.min(window.devicePixelRatio, phoneSized ? 1 : 2),
+    );
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.shadowMap.enabled = true;
     host.appendChild(renderer.domElement);
@@ -1008,8 +1011,12 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
     const clock = new THREE.Clock();
     let elapsed = 0;
     let frame = 0;
-    const animate = () => {
+    let lastRenderedAt = 0;
+    const minimumFrameInterval = 1000 / (phoneSized ? 30 : 60);
+    const animate = (now = 0) => {
       frame = requestAnimationFrame(animate);
+      if (now - lastRenderedAt < minimumFrameInterval) return;
+      lastRenderedAt = now;
       const delta = Math.min(clock.getDelta(), 0.05);
       if (playingRef.current) elapsed += delta * speedRef.current;
       const wave = (Math.sin(elapsed * Math.PI) + 1) / 2;

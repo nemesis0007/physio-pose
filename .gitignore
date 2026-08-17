@@ -36,8 +36,13 @@ yarn-error.log*
 
 # typescript
 next-env.d.ts
+*.tsbuildinfo
 /dist/
 /.wrangler/
 /outputs/
 /work/
 /physio-portal/
+
+# local build and design artifacts
+/.sites-artifacts/
+/.tmp-*/

@@ -1,10 +1,9 @@
 "use client";
 
-import {
+import type {
   DrawingUtils,
-  FilesetResolver,
+  NormalizedLandmark,
   PoseLandmarker,
-  type NormalizedLandmark,
 } from "@mediapipe/tasks-vision";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -36,10 +35,79 @@ import {
   type MovementInsight,
   type ProgressSession,
 } from "./intelligence";
+import type { CloudSessionScore } from "./session-scoring";
 
 const ExerciseMannequin = dynamic(() =>
   import("./ExerciseMannequin").then((module) => module.ExerciseMannequin),
 );
+
+type Exercise = (typeof EXERCISES)[number];
+type DrawingUtilsConstructor = new (
+  context: CanvasRenderingContext2D,
+) => DrawingUtils;
+type PoseConnection = { start: number; end: number };
+
+function DeferredExerciseMannequin({ exercise }: { exercise: Exercise }) {
+  const placeholderRef = useRef<HTMLElement>(null);
+  const [shouldLoad, setShouldLoad] = useState(false);
+
+  useEffect(() => {
+    const placeholder = placeholderRef.current;
+    if (!placeholder || !("IntersectionObserver" in window)) {
+      setShouldLoad(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        setShouldLoad(true);
+        observer.disconnect();
+      },
+      { rootMargin: "500px 0px" },
+    );
+    observer.observe(placeholder);
+    return () => observer.disconnect();
+  }, []);
+
+  if (shouldLoad) return <ExerciseMannequin exercise={exercise} />;
+
+  return (
+    <section
+      ref={placeholderRef}
+      className="mannequin-section"
+      id="exercise-demo"
+      aria-labelledby="movement-guide-title"
+    >
+      <div className="mannequin-copy">
+        <p className="eyebrow">INTERACTIVE 3D MOVEMENT GUIDE</p>
+        <h2 id="movement-guide-title">
+          See the motion before you <em>perform it.</em>
+        </h2>
+        <p>
+          Review the selected protocol while the interactive movement guide
+          prepares just before it enters view.
+        </p>
+        <div className="demo-protocol">
+          <span>NOW SHOWING</span>
+          <strong>{exercise.name}</strong>
+          <p>{exercise.cue}</p>
+        </div>
+        <small>
+          Visual guide only. Follow the range, support and dosage prescribed by
+          a physiotherapist, and stop if you feel pain.
+        </small>
+      </div>
+      <div className="mannequin-stage mannequin-loading-stage" role="status">
+        <div className="mannequin-loading-orbit" aria-hidden="true">
+          <span />
+        </div>
+        <strong>Preparing the 3D guide</strong>
+        <small>It will be ready before you reach this section.</small>
+      </div>
+    </section>
+  );
+}
 
 type SessionStatus =
   | "idle"
@@ -185,9 +253,18 @@ export function PhysioTwinApp() {
   const animationRef = useRef<number | null>(null);
   const predictFrameRef = useRef<() => void>(() => {});
   const lastVideoTimeRef = useRef(-1);
+  const lastInferenceAtRef = useRef(0);
+  const inferenceIntervalRef = useRef(1000 / 30);
   const lastUiUpdateRef = useRef(0);
   const trackerRef = useRef<RepTracker>(initialRepTracker());
   const drawingRef = useRef<DrawingUtils | null>(null);
+  const drawingUtilsConstructorRef = useRef<DrawingUtilsConstructor | null>(
+    null,
+  );
+  const poseConnectionsRef = useRef<PoseConnection[]>([]);
+  const visionModuleRef = useRef<
+    Promise<typeof import("@mediapipe/tasks-vision")> | null
+  >(null);
   const smoothedMetricsRef = useRef<PoseMetrics | null>(null);
   const lastRawMetricsRef = useRef<PoseMetrics | null>(null);
   const stableFrameCountRef = useRef(0);
@@ -218,6 +295,10 @@ export function PhysioTwinApp() {
     [],
   );
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [cloudScore, setCloudScore] = useState<CloudSessionScore | null>(null);
+  const [cloudScoreStatus, setCloudScoreStatus] = useState<
+    "idle" | "syncing" | "verified" | "offline"
+  >("idle");
 
   useEffect(() => {
     const timer = window.setTimeout(
@@ -250,6 +331,50 @@ export function PhysioTwinApp() {
       // Private mode or blocked storage: the current session still works.
     }
   }, []);
+
+  useEffect(() => {
+    if (!reps.length) return;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setCloudScoreStatus("syncing");
+      try {
+        const response = await fetch("/api/session-score", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            exerciseId: selectedExerciseId,
+            reps: reps.map((rep) => ({
+              accepted: rep.accepted,
+              score: rep.score,
+              symmetry: rep.symmetry,
+              confidence: rep.confidence,
+              cameraQuality: rep.cameraQuality,
+              issues: rep.issues,
+            })),
+            recentScores: progressSessions
+              .filter((session) => session.exerciseId === selectedExerciseId)
+              .map((session) => session.score),
+          }),
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("Cloud scoring was unavailable.");
+        const payload = (await response.json()) as {
+          summary: CloudSessionScore;
+        };
+        setCloudScore(payload.summary);
+        setCloudScoreStatus("verified");
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setCloudScoreStatus("offline");
+      }
+    }, 320);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [progressSessions, reps, selectedExerciseId]);
 
   const selectedExercise =
     EXERCISES.find((exercise) => exercise.id === selectedExerciseId) ??
@@ -357,6 +482,7 @@ export function PhysioTwinApp() {
     canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
     drawingRef.current = null;
     lastVideoTimeRef.current = -1;
+    lastInferenceAtRef.current = 0;
     sourceModeRef.current = null;
     setSourceMode(null);
   }, []);
@@ -496,30 +622,39 @@ export function PhysioTwinApp() {
     const landmarker = landmarkerRef.current;
     if (!video || !canvas || !landmarker || !sourceActiveRef.current) return;
 
-    if (video.readyState >= 2 && video.currentTime !== lastVideoTimeRef.current) {
+    const inferenceNow = performance.now();
+    if (
+      video.readyState >= 2 &&
+      video.currentTime !== lastVideoTimeRef.current &&
+      inferenceNow - lastInferenceAtRef.current >= inferenceIntervalRef.current
+    ) {
       lastVideoTimeRef.current = video.currentTime;
-      const result = landmarker.detectForVideo(video, performance.now());
+      lastInferenceAtRef.current = inferenceNow;
+      const result = landmarker.detectForVideo(video, inferenceNow);
       const landmarks = result.landmarks[0];
       const context = canvas.getContext("2d");
 
       if (context) {
         context.clearRect(0, 0, canvas.width, canvas.height);
-        if (!drawingRef.current) drawingRef.current = new DrawingUtils(context);
+        const DrawingUtilsClass = drawingUtilsConstructorRef.current;
+        if (!drawingRef.current && DrawingUtilsClass) {
+          drawingRef.current = new DrawingUtilsClass(context);
+        }
         if (landmarks) {
           context.save();
           if (sourceModeRef.current === "camera") {
             context.translate(canvas.width, 0);
             context.scale(-1, 1);
           }
-          drawingRef.current.drawConnectors(
+          drawingRef.current?.drawConnectors(
             landmarks,
-            PoseLandmarker.POSE_CONNECTIONS,
+            poseConnectionsRef.current,
             {
               color: "#68e3d2",
               lineWidth: 4,
             },
           );
-          drawingRef.current.drawLandmarks(landmarks, {
+          drawingRef.current?.drawLandmarks(landmarks, {
             color: "#f7c873",
             fillColor: "#0b1821",
             lineWidth: 2,
@@ -546,6 +681,11 @@ export function PhysioTwinApp() {
 
   const createLandmarker = useCallback(async () => {
     if (landmarkerRef.current) return landmarkerRef.current;
+    visionModuleRef.current ??= import("@mediapipe/tasks-vision");
+    const { DrawingUtils, FilesetResolver, PoseLandmarker } =
+      await visionModuleRef.current;
+    drawingUtilsConstructorRef.current = DrawingUtils;
+    poseConnectionsRef.current = PoseLandmarker.POSE_CONNECTIONS;
     const vision = await FilesetResolver.forVisionTasks("/mediapipe/wasm");
     const options = {
       baseOptions: {
@@ -584,6 +724,8 @@ export function PhysioTwinApp() {
     setPhase("ready");
     setMetrics(null);
     setReps([]);
+    setCloudScore(null);
+    setCloudScoreStatus("idle");
     setInsight(assessMovement([], selectedExerciseId, calibration));
   }, [calibration, selectedExerciseId]);
 
@@ -597,12 +739,15 @@ export function PhysioTwinApp() {
       );
       await createLandmarker();
 
+      const phoneSized = window.matchMedia("(max-width: 820px)").matches;
+      inferenceIntervalRef.current = 1000 / (phoneSized ? 15 : 30);
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
           facingMode: "user",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: phoneSized ? 640 : 1280 },
+          height: { ideal: phoneSized ? 480 : 720 },
+          frameRate: { ideal: phoneSized ? 24 : 30, max: 30 },
         },
       });
       streamRef.current = stream;
@@ -867,19 +1012,31 @@ export function PhysioTwinApp() {
     };
   }, [stopSource]);
 
-  const acceptedCount = reps.filter((rep) => rep.accepted).length;
-  const qualityRate = reps.length
-    ? Math.round((acceptedCount / reps.length) * 100)
-    : 0;
+  const currentCloudScore =
+    cloudScore?.totalReps === reps.length ? cloudScore : null;
+  const acceptedCount =
+    currentCloudScore?.acceptedReps ??
+    reps.filter((rep) => rep.accepted).length;
+  const qualityRate =
+    currentCloudScore?.acceptanceRate ??
+    (reps.length ? Math.round((acceptedCount / reps.length) * 100) : 0);
   const exerciseProgress = progressSessions.filter(
     (session) => session.exerciseId === selectedExerciseId,
   );
-  const progressProjection = projectProgress(exerciseProgress);
-  const averageSymmetry = reps.length
-    ? Math.round(
-        reps.reduce((sum, rep) => sum + rep.symmetry, 0) / reps.length,
-      )
-    : Math.round(insight.symmetry);
+  const localProjection = projectProgress(exerciseProgress);
+  const progressProjection = currentCloudScore
+    ? {
+        trend: currentCloudScore.trend,
+        projected: currentCloudScore.projectedScore,
+      }
+    : localProjection;
+  const averageSymmetry =
+    currentCloudScore?.averageSymmetry ??
+    (reps.length
+      ? Math.round(
+          reps.reduce((sum, rep) => sum + rep.symmetry, 0) / reps.length,
+        )
+      : Math.round(insight.symmetry));
   const sourceActive =
     status === "tracking" ||
     status === "reposition" ||
@@ -892,19 +1049,26 @@ export function PhysioTwinApp() {
 
       <section className="hero" id="top">
         <div className="hero-copy">
-          <p className="eyebrow">PRIVATE MOVEMENT INTELLIGENCE</p>
+          <p className="eyebrow">AI-GUIDED HOME REHABILITATION</p>
           <h1>
-            Your movement.
+            Move with confidence.
             <br />
-            <em>Clearly understood.</em>
+            <em>Recover with clarity.</em>
           </h1>
           <p className="hero-intro">
-            A private, adaptive assessment that recognizes exercise, measures
-            form over time and explains exactly what changed—frame by frame.
+            PhysioTwin turns the camera you already have into a private movement
+            coach—guiding each repetition and creating a clear story your
+            physiotherapist can review.
           </p>
 
+          <div className="hero-proof" aria-label="PhysioTwin benefits">
+            <span><i /> No wearables</span>
+            <span><i /> Video stays on device</span>
+            <span><i /> Clinician-ready summary</span>
+          </div>
+
           <label className="exercise-select">
-            <span>Exercise protocol</span>
+            <span>Choose today&apos;s movement</span>
             <select
               value={selectedExerciseId}
               onChange={(event) => {
@@ -924,10 +1088,29 @@ export function PhysioTwinApp() {
               ))}
             </select>
             <small>
-              Explainable heuristic scoring available for every protocol ·
-              temporal analysis · on-device
+              Transparent scoring · real-time coaching · private by design
             </small>
           </label>
+          <div className="session-plan" aria-label="Selected session setup">
+            <div className="session-plan-heading">
+              <span>TODAY&apos;S SESSION</span>
+              <strong>{selectedExercise.name}</strong>
+            </div>
+            <dl>
+              <div>
+                <dt>Camera</dt>
+                <dd>{selectedExercise.position}</dd>
+              </div>
+              <div>
+                <dt>Prepare</dt>
+                <dd>{selectedExercise.equipment}</dd>
+              </div>
+              <div>
+                <dt>Focus</dt>
+                <dd>{selectedExercise.focus}</dd>
+              </div>
+            </dl>
+          </div>
           <div className="intelligence-controls">
             <button
               type="button"
@@ -935,7 +1118,7 @@ export function PhysioTwinApp() {
               onClick={calibrateMovement}
             >
               <span>{calibration ? "✓" : "01"}</span>
-              {calibration ? "Baseline calibrated" : "Calibrate to me"}
+              {calibration ? "Range personalized" : "Personalize my range"}
             </button>
             <label>
               <input
@@ -970,14 +1153,16 @@ export function PhysioTwinApp() {
               accept="video/mp4,video/webm,video/quicktime,video/*"
               onChange={handleUpload}
             />
-            <button className="stop-button" onClick={painStop}>
-              Stop / I feel pain
-            </button>
+            {sourceActive && (
+              <button className="stop-button" onClick={painStop}>
+                Stop / I feel pain
+              </button>
+            )}
           </div>
           <p className="microcopy">
-            Nothing leaves this device. Stop immediately if you feel pain;
-            results support—not replace—clinical judgement. Videos up to 250 MB
-            are processed locally.
+            Video never leaves this device. Anonymous movement measurements are
+            scored by Cloudflare. Stop immediately if you feel pain; results
+            support—not replace—clinical judgement.
           </p>
         </div>
 
@@ -994,6 +1179,7 @@ export function PhysioTwinApp() {
           <div className="camera-stage">
             <video
               ref={videoRef}
+              autoPlay
               playsInline
               muted
               controls={sourceMode === "video"}
@@ -1016,8 +1202,16 @@ export function PhysioTwinApp() {
                   <span className="pose-leg left" />
                   <span className="pose-leg right" />
                 </div>
-                <strong>Camera or video preview</strong>
-                <span>Processed locally in this browser</span>
+                <strong>Your private movement space</strong>
+                <span>Live video is processed locally in this browser</span>
+                <div className="camera-ready-card">
+                  <small>BEFORE YOU BEGIN</small>
+                  <ul>
+                    <li>Place your full body in frame</li>
+                    <li>Use the {selectedExercise.position.toLowerCase()}</li>
+                    <li>Keep {selectedExercise.equipment.toLowerCase()} ready</li>
+                  </ul>
+                </div>
               </div>
             )}
             <div className="camera-badge">
@@ -1168,6 +1362,20 @@ export function PhysioTwinApp() {
               : "Rep-based heuristic"}
           </strong>
         </div>
+        <div>
+          <span>Session scoring</span>
+          <strong className={`cloud-score-state ${cloudScoreStatus}`}>
+            <i />
+            {cloudScoreStatus === "verified"
+              ? "Cloudflare verified"
+              : cloudScoreStatus === "syncing"
+                ? "Calculating in cloud"
+                : cloudScoreStatus === "offline"
+                  ? "On-device fallback"
+                  : "Ready for Cloudflare"}
+          </strong>
+          <small>Measurements only · never video</small>
+        </div>
       </section>
 
       <section className="intelligence-deck" aria-label="Movement intelligence">
@@ -1209,7 +1417,7 @@ export function PhysioTwinApp() {
         </article>
       </section>
 
-      <ExerciseMannequin exercise={selectedExercise} />
+      <DeferredExerciseMannequin exercise={selectedExercise} />
 
       <section className="demo-band" aria-labelledby="demo-title">
         <div>

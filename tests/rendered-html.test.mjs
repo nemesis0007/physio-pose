@@ -26,6 +26,27 @@ async function render(pathname = "/") {
   );
 }
 
+async function request(pathname, init) {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set(
+    "test",
+    `${process.pid}-${Date.now()}-${pathname}-request`,
+  );
+  const { default: worker } = await import(workerUrl.href);
+  return worker.fetch(
+    new Request(`http://localhost${pathname}`, init),
+    {
+      ASSETS: {
+        fetch: async () => new Response("Not found", { status: 404 }),
+      },
+    },
+    {
+      waitUntil() {},
+      passThroughOnException() {},
+    },
+  );
+}
+
 test("server-renders the video assessment product", async () => {
   const response = await render("/");
   assert.equal(response.status, 200);
@@ -35,12 +56,13 @@ test("server-renders the video assessment product", async () => {
   assert.match(html, /<title>PhysioTwin/);
   assert.match(html, /Upload exercise video/);
   assert.match(html, /accept="video\/mp4,video\/webm,video\/quicktime,video\/\*"/);
-  assert.match(html, /Videos up to 250 MB/);
+  assert.match(html, /Video never leaves this device/);
   assert.match(html, /Chair sit-to-stand/);
-  assert.match(html, /heuristic scoring available for every protocol/i);
+  assert.match(html, /Transparent scoring/);
+  assert.match(html, /Anonymous movement measurements are scored by Cloudflare/);
   assert.match(html, /INTERACTIVE 3D MOVEMENT GUIDE/);
-  assert.match(html, /Drag to rotate/);
-  assert.match(html, /Pause animation/);
+  assert.match(html, /Preparing the 3D guide/);
+  assert.match(html, /ready before you reach this section/);
   assert.match(html, /Download session report/);
   assert.match(html, /gate ≥/);
 });
@@ -94,6 +116,50 @@ test("server-renders the shared patient and physio care plan", async () => {
   assert.match(html, /Your plan, one day at a time/);
   assert.doesNotMatch(html, /Physio workspace/);
   assert.match(html, /profile ID connects completed reps/i);
+});
+
+test("calculates anonymized session scores in the Cloudflare route", async () => {
+  const response = await request("/api/session-score", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      exerciseId: "chair-sit-to-stand",
+      reps: [
+        {
+          accepted: true,
+          score: 91,
+          symmetry: 92,
+          confidence: 0.9,
+          cameraQuality: 94,
+          issues: [],
+        },
+        {
+          accepted: true,
+          score: 86,
+          symmetry: 88,
+          confidence: 0.87,
+          cameraQuality: 91,
+          issues: [],
+        },
+        {
+          accepted: false,
+          score: 62,
+          symmetry: 74,
+          confidence: 0.81,
+          cameraQuality: 84,
+          issues: ["Keep the chest taller."],
+        },
+      ],
+      recentScores: [70, 74, 80],
+    }),
+  });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.summary.processor, "cloudflare-worker");
+  assert.equal(payload.summary.totalReps, 3);
+  assert.equal(payload.summary.acceptedReps, 2);
+  assert.equal(payload.summary.acceptanceRate, 67);
+  assert.equal(payload.summary.coachingFocus, "Keep the chest taller.");
 });
 
 test("defines a scoring profile for every exercise", async () => {
