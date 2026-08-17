@@ -86,7 +86,7 @@ test("server-renders the model card and safety limitations", async () => {
   assert.equal(response.status, 200);
 
   const html = await response.text();
-  assert.match(html, /MediaPipe Pose Landmarker Full/);
+  assert.match(html, /Pose Landmarker Lite on phones, Full on larger screens/);
   assert.match(html, /three-frame confirmation/);
   assert.match(html, /Finite-state machine/);
   assert.match(html, /26 transparent hackathon rule profiles/);

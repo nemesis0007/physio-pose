@@ -10,7 +10,7 @@ const PROCESS = [
   {
     step: "02",
     title: "Estimate pose",
-    body: "MediaPipe Pose Landmarker Full locates 33 body landmarks. WebGL/GPU is attempted first with a CPU fallback.",
+    body: "MediaPipe Pose Landmarker locates 33 body landmarks. Phones use the Lite model for smoother tracking; larger screens retain the Full model. GPU is attempted first with a CPU fallback.",
   },
   {
     step: "03",
@@ -83,7 +83,7 @@ export default function HowItWorksPage() {
             </div>
             <div className="model-row">
               <strong>Pose estimation</strong>
-              <span>MediaPipe Pose Landmarker Full, float16 task model</span>
+              <span>MediaPipe Pose Landmarker Lite on phones, Full on larger screens</span>
               <span>No — pretrained</span>
               <span>Returns 33 body landmarks from each video frame</span>
             </div>

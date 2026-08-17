@@ -244,6 +244,7 @@ function formatMetric(
 export function PhysioTwinApp() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const inferenceCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const landmarkerRef = useRef<PoseLandmarker | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -255,6 +256,7 @@ export function PhysioTwinApp() {
   const lastVideoTimeRef = useRef(-1);
   const lastInferenceAtRef = useRef(0);
   const inferenceIntervalRef = useRef(1000 / 30);
+  const efficientTrackingRef = useRef(false);
   const lastUiUpdateRef = useRef(0);
   const trackerRef = useRef<RepTracker>(initialRepTracker());
   const drawingRef = useRef<DrawingUtils | null>(null);
@@ -276,6 +278,9 @@ export function PhysioTwinApp() {
 
   const [status, setStatus] = useState<SessionStatus>("idle");
   const [sourceMode, setSourceMode] = useState<SourceMode>(null);
+  const [trackingProfile, setTrackingProfile] = useState<"lite" | "full">(
+    "full",
+  );
   const [phase, setPhase] = useState<RepPhase>("ready");
   const [metrics, setMetrics] = useState<PoseMetrics | null>(null);
   const [message, setMessage] = useState(
@@ -481,6 +486,7 @@ export function PhysioTwinApp() {
     const canvas = canvasRef.current;
     canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
     drawingRef.current = null;
+    inferenceCanvasRef.current = null;
     lastVideoTimeRef.current = -1;
     lastInferenceAtRef.current = 0;
     sourceModeRef.current = null;
@@ -630,7 +636,40 @@ export function PhysioTwinApp() {
     ) {
       lastVideoTimeRef.current = video.currentTime;
       lastInferenceAtRef.current = inferenceNow;
-      const result = landmarker.detectForVideo(video, inferenceNow);
+      let inferenceSource: HTMLVideoElement | HTMLCanvasElement = video;
+      if (efficientTrackingRef.current && video.videoWidth > 640) {
+        const targetWidth = 640;
+        const targetHeight = Math.max(
+          1,
+          Math.round(targetWidth * (video.videoHeight / video.videoWidth)),
+        );
+        let inferenceCanvas = inferenceCanvasRef.current;
+        if (
+          !inferenceCanvas ||
+          inferenceCanvas.width !== targetWidth ||
+          inferenceCanvas.height !== targetHeight
+        ) {
+          const nextCanvas = document.createElement("canvas");
+          nextCanvas.width = targetWidth;
+          nextCanvas.height = targetHeight;
+          inferenceCanvasRef.current = nextCanvas;
+          inferenceCanvas = nextCanvas;
+        }
+        const inferenceContext = inferenceCanvas.getContext("2d", {
+          alpha: false,
+        });
+        if (inferenceContext) {
+          inferenceContext.drawImage(
+            video,
+            0,
+            0,
+            targetWidth,
+            targetHeight,
+          );
+          inferenceSource = inferenceCanvas;
+        }
+      }
+      const result = landmarker.detectForVideo(inferenceSource, inferenceNow);
       const landmarks = result.landmarks[0];
       const context = canvas.getContext("2d");
 
@@ -679,7 +718,7 @@ export function PhysioTwinApp() {
     predictFrameRef.current = predictFrame;
   }, [predictFrame]);
 
-  const createLandmarker = useCallback(async () => {
+  const createLandmarker = useCallback(async (preferLite: boolean) => {
     if (landmarkerRef.current) return landmarkerRef.current;
     visionModuleRef.current ??= import("@mediapipe/tasks-vision");
     const { DrawingUtils, FilesetResolver, PoseLandmarker } =
@@ -689,7 +728,9 @@ export function PhysioTwinApp() {
     const vision = await FilesetResolver.forVisionTasks("/mediapipe/wasm");
     const options = {
       baseOptions: {
-        modelAssetPath: "/models/pose_landmarker_full.task",
+        modelAssetPath: preferLite
+          ? "/models/pose_landmarker_lite.task"
+          : "/models/pose_landmarker_full.task",
         delegate: "GPU" as const,
       },
       runningMode: "VIDEO" as const,
@@ -737,10 +778,12 @@ export function PhysioTwinApp() {
       setMessage(
         "The camera stays in this browser; only movement measurements are evaluated.",
       );
-      await createLandmarker();
-
       const phoneSized = window.matchMedia("(max-width: 820px)").matches;
+      efficientTrackingRef.current = phoneSized;
+      setTrackingProfile(phoneSized ? "lite" : "full");
       inferenceIntervalRef.current = 1000 / (phoneSized ? 15 : 30);
+      await createLandmarker(phoneSized);
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
@@ -794,7 +837,11 @@ export function PhysioTwinApp() {
         setMessage(
           `Preparing ${file.name}. The file stays on this device and is not uploaded.`,
         );
-        await createLandmarker();
+        const phoneSized = window.matchMedia("(max-width: 820px)").matches;
+        efficientTrackingRef.current = phoneSized;
+        setTrackingProfile(phoneSized ? "lite" : "full");
+        inferenceIntervalRef.current = 1000 / (phoneSized ? 15 : 30);
+        await createLandmarker(phoneSized);
 
         const video = videoRef.current;
         const canvas = canvasRef.current;
@@ -986,8 +1033,9 @@ export function PhysioTwinApp() {
             <tbody>${rows}</tbody>
           </table>
           <footer>
-            Pose estimation: MediaPipe Pose Landmarker Full. Video frames were
-            processed locally and are not included in this report.
+            Pose estimation: MediaPipe Pose Landmarker
+            ${trackingProfile === "lite" ? "Lite" : "Full"}. Video frames
+            were processed locally and are not included in this report.
           </footer>
         </body>
       </html>`;
@@ -1003,7 +1051,7 @@ export function PhysioTwinApp() {
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
-  }, [reps, selectedExercise.id, selectedExercise.name]);
+  }, [reps, selectedExercise.id, selectedExercise.name, trackingProfile]);
 
   useEffect(() => {
     return () => {
@@ -1173,7 +1221,11 @@ export function PhysioTwinApp() {
               <strong>{STATUS_COPY[status]}</strong>
             </div>
             <span className="session-id">
-              {sourceMode === "video" ? "LOCAL VIDEO" : "SESSION 001"}
+              {sourceMode === "video"
+                ? `${trackingProfile.toUpperCase()} · LOCAL VIDEO`
+                : sourceActive
+                  ? `${trackingProfile.toUpperCase()} · LIVE`
+                  : "PRIVATE PREVIEW"}
             </span>
           </div>
           <div className="camera-stage">
