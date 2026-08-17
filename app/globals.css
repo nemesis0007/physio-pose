@@ -2389,6 +2389,13 @@ footer span { color: #737985; }
   color: #4bdf91;
   font-weight: 800;
 }
+.camera-placeholder.preparing .pose-figure {
+  animation: camera-ready-pulse 1.35s ease-in-out infinite alternate;
+}
+@keyframes camera-ready-pulse {
+  from { opacity: .42; transform: scale(.97); }
+  to { opacity: .92; transform: scale(1.02); }
+}
 .protocol-strip { grid-template-columns: repeat(5, 1fr); }
 .protocol-strip > div > small {
   display: block;
@@ -2459,4 +2466,8 @@ footer span { color: #737985; }
   .event-panel { backdrop-filter: none; }
   .protocol-strip { grid-template-columns: repeat(2, 1fr); }
   .protocol-strip > div:last-child { grid-column: 1 / -1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .camera-placeholder.preparing .pose-figure { animation: none; }
 }

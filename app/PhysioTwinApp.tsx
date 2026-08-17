@@ -241,6 +241,55 @@ function formatMetric(
   return value === undefined ? "—" : `${Math.round(value)}${unit}`;
 }
 
+function waitForVideoMetadata(video: HTMLVideoElement) {
+  if (video.readyState >= HTMLMediaElement.HAVE_METADATA && video.videoWidth) {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("The camera did not provide video metadata in time."));
+    }, 8_000);
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      video.removeEventListener("loadedmetadata", handleReady);
+      video.removeEventListener("error", handleError);
+    };
+    const handleReady = () => {
+      if (!video.videoWidth || !video.videoHeight) return;
+      cleanup();
+      resolve();
+    };
+    const handleError = () => {
+      cleanup();
+      reject(new Error("The browser could not decode the video source."));
+    };
+    video.addEventListener("loadedmetadata", handleReady);
+    video.addEventListener("error", handleError, { once: true });
+  });
+}
+
+function waitForFirstVideoFrame(video: HTMLVideoElement) {
+  const frameVideo = video as HTMLVideoElement & {
+    requestVideoFrameCallback?: (callback: () => void) => number;
+  };
+  return new Promise<void>((resolve) => {
+    let complete = false;
+    const finish = () => {
+      if (complete) return;
+      complete = true;
+      window.clearTimeout(timeout);
+      resolve();
+    };
+    const timeout = window.setTimeout(finish, 1_500);
+    if (frameVideo.requestVideoFrameCallback) {
+      frameVideo.requestVideoFrameCallback(finish);
+    } else {
+      requestAnimationFrame(() => requestAnimationFrame(finish));
+    }
+  });
+}
+
 export function PhysioTwinApp() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -797,11 +846,14 @@ export function PhysioTwinApp() {
 
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      if (!video || !canvas) return;
+      if (!video || !canvas) throw new Error("Camera preview is unavailable.");
+      video.muted = true;
       video.srcObject = stream;
+      await waitForVideoMetadata(video);
       await video.play();
-      canvas.width = video.videoWidth || 1280;
-      canvas.height = video.videoHeight || 720;
+      await waitForFirstVideoFrame(video);
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
       sourceModeRef.current = "camera";
       setSourceMode("camera");
       sourceActiveRef.current = true;
@@ -812,7 +864,11 @@ export function PhysioTwinApp() {
       stopSource();
       setStatus("error");
       setMessage(
-        "Camera mode is unavailable. You can upload a video or use the backup demo.",
+        error instanceof DOMException && error.name === "NotAllowedError"
+          ? "Camera permission was blocked. Allow camera access, or upload a video instead."
+          : error instanceof DOMException && error.name === "NotFoundError"
+            ? "No camera was found. Connect a camera or upload a video instead."
+            : "The camera did not produce a usable video frame. Close other camera apps and try again.",
       );
     }
   }, [createLandmarker, predictFrame, prepareSession, stopSource]);
@@ -850,16 +906,14 @@ export function PhysioTwinApp() {
         objectUrlRef.current = objectUrl;
         video.src = objectUrl;
         video.muted = true;
-        await new Promise<void>((resolve, reject) => {
-          video.onloadedmetadata = () => resolve();
-          video.onerror = () => reject(new Error("The video could not be read."));
-        });
-        canvas.width = video.videoWidth || 1280;
-        canvas.height = video.videoHeight || 720;
+        await waitForVideoMetadata(video);
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
         sourceModeRef.current = "video";
         setSourceMode("video");
         sourceActiveRef.current = true;
         await video.play();
+        await waitForFirstVideoFrame(video);
         setStatus("tracking");
         animationRef.current = requestAnimationFrame(predictFrame);
       } catch (error) {
@@ -1088,7 +1142,6 @@ export function PhysioTwinApp() {
   const sourceActive =
     status === "tracking" ||
     status === "reposition" ||
-    status === "loading" ||
     status === "complete";
 
   return (
@@ -1221,7 +1274,9 @@ export function PhysioTwinApp() {
               <strong>{STATUS_COPY[status]}</strong>
             </div>
             <span className="session-id">
-              {sourceMode === "video"
+              {status === "loading"
+                ? `${trackingProfile.toUpperCase()} · PREPARING`
+                : sourceMode === "video"
                 ? `${trackingProfile.toUpperCase()} · LOCAL VIDEO`
                 : sourceActive
                   ? `${trackingProfile.toUpperCase()} · LIVE`
@@ -1245,7 +1300,12 @@ export function PhysioTwinApp() {
             />
             <canvas ref={canvasRef} aria-label="Pose landmark overlay" />
             {!sourceActive && (
-              <div className="camera-placeholder">
+              <div
+                className={`camera-placeholder ${
+                  status === "loading" ? "preparing" : ""
+                }`}
+                aria-live="polite"
+              >
                 <div className="pose-figure" aria-hidden="true">
                   <span className="pose-head" />
                   <span className="pose-body" />
@@ -1254,20 +1314,34 @@ export function PhysioTwinApp() {
                   <span className="pose-leg left" />
                   <span className="pose-leg right" />
                 </div>
-                <strong>Your private movement space</strong>
-                <span>Live video is processed locally in this browser</span>
-                <div className="camera-ready-card">
-                  <small>BEFORE YOU BEGIN</small>
-                  <ul>
-                    <li>Place your full body in frame</li>
-                    <li>Use the {selectedExercise.position.toLowerCase()}</li>
-                    <li>Keep {selectedExercise.equipment.toLowerCase()} ready</li>
-                  </ul>
-                </div>
+                <strong>
+                  {status === "loading"
+                    ? "Preparing a clear camera preview…"
+                    : "Your private movement space"}
+                </strong>
+                <span>
+                  {status === "loading"
+                    ? "The session starts after the first video frame is ready"
+                    : "Live video is processed locally in this browser"}
+                </span>
+                {status !== "loading" && (
+                  <div className="camera-ready-card">
+                    <small>BEFORE YOU BEGIN</small>
+                    <ul>
+                      <li>Place your full body in frame</li>
+                      <li>Use the {selectedExercise.position.toLowerCase()}</li>
+                      <li>Keep {selectedExercise.equipment.toLowerCase()} ready</li>
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
             <div className="camera-badge">
-              {sourceActive ? PHASE_COPY[phase] : "Awaiting session"}
+              {sourceActive
+                ? PHASE_COPY[phase]
+                : status === "loading"
+                  ? "Preparing camera"
+                  : "Awaiting session"}
             </div>
             <div className={`quality-badge ${insight.readiness}`}>
               <span />
