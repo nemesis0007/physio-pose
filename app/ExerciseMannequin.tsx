@@ -1012,9 +1012,25 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
     let elapsed = 0;
     let frame = 0;
     let lastRenderedAt = 0;
+    let inViewport = true;
+    let pageVisible = !document.hidden;
     const minimumFrameInterval = 1000 / (phoneSized ? 30 : 60);
+    const visibilityObserver = new IntersectionObserver(
+      ([entry]) => {
+        inViewport = entry.isIntersecting;
+        if (inViewport) clock.getDelta();
+      },
+      { rootMargin: "120px 0px" },
+    );
+    visibilityObserver.observe(host);
+    const handleVisibilityChange = () => {
+      pageVisible = !document.hidden;
+      if (pageVisible) clock.getDelta();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     const animate = (now = 0) => {
       frame = requestAnimationFrame(animate);
+      if (!inViewport || !pageVisible) return;
       if (now - lastRenderedAt < minimumFrameInterval) return;
       lastRenderedAt = now;
       const delta = Math.min(clock.getDelta(), 0.05);
@@ -1038,6 +1054,8 @@ export function ExerciseMannequin({ exercise }: { exercise: Exercise }) {
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
+      visibilityObserver.disconnect();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       controls.dispose();
       renderer.dispose();
       renderer.domElement.remove();

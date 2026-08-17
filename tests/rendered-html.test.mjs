@@ -162,6 +162,59 @@ test("calculates anonymized session scores in the Cloudflare route", async () =>
   assert.equal(payload.summary.coachingFocus, "Keep the chest taller.");
 });
 
+test("rejects unsafe Cloudflare scoring payloads", async () => {
+  const emptySession = await request("/api/session-score", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      exerciseId: "chair-sit-to-stand",
+      reps: [],
+      recentScores: [],
+    }),
+  });
+  assert.equal(emptySession.status, 400);
+
+  const stringMetric = await request("/api/session-score", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      exerciseId: "chair-sit-to-stand",
+      reps: [
+        {
+          accepted: true,
+          score: "91",
+          symmetry: 92,
+          confidence: 0.9,
+          cameraQuality: 94,
+          issues: [],
+        },
+      ],
+      recentScores: [],
+    }),
+  });
+  assert.equal(stringMetric.status, 400);
+
+  const oversized = await request("/api/session-score", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      exerciseId: "chair-sit-to-stand",
+      reps: [
+        {
+          accepted: true,
+          score: 91,
+          symmetry: 92,
+          confidence: 0.9,
+          cameraQuality: 94,
+          issues: [],
+        },
+      ],
+      padding: "x".repeat(50_000),
+    }),
+  });
+  assert.equal(oversized.status, 413);
+});
+
 test("defines a scoring profile for every exercise", async () => {
   const [source, mannequin] = await Promise.all([
     readFile(new URL("../app/exercise-data.ts", import.meta.url), "utf8"),

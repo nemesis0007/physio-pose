@@ -9,9 +9,8 @@ const MAX_HISTORY = 20;
 const MAX_BODY_BYTES = 48 * 1024;
 
 function safeNumber(value: unknown, minimum: number, maximum: number) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return null;
-  return Math.min(maximum, Math.max(minimum, parsed));
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.min(maximum, Math.max(minimum, value));
 }
 
 function safeRep(value: unknown): CloudRepMeasurement | null {
@@ -60,7 +59,11 @@ export async function POST(request: Request) {
 
   let payload: Record<string, unknown>;
   try {
-    payload = (await request.json()) as Record<string, unknown>;
+    const body = await request.text();
+    if (new TextEncoder().encode(body).byteLength > MAX_BODY_BYTES) {
+      return json({ error: "Session payload is too large." }, { status: 413 });
+    }
+    payload = JSON.parse(body) as Record<string, unknown>;
   } catch {
     return json({ error: "Send a valid JSON session." }, { status: 400 });
   }
@@ -68,7 +71,11 @@ export async function POST(request: Request) {
   const exerciseId =
     typeof payload.exerciseId === "string" ? payload.exerciseId.trim() : "";
   const rawReps = Array.isArray(payload.reps) ? payload.reps : [];
-  if (!exercisePattern.test(exerciseId) || rawReps.length > MAX_REPS) {
+  if (
+    !exercisePattern.test(exerciseId) ||
+    rawReps.length === 0 ||
+    rawReps.length > MAX_REPS
+  ) {
     return json({ error: "Invalid session." }, { status: 400 });
   }
   const reps = rawReps.map(safeRep);
