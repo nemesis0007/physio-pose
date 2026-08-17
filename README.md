@@ -8,6 +8,10 @@ and connect completed sessions with a shared patient–physiotherapist care plan
 > diagnose conditions or replace assessment by a qualified clinician. Stop an
 > exercise immediately if it causes pain.
 
+## Live application
+
+[Open PhysioTwin on Cloudflare Workers](https://physiotwin-patient.nirajbots.workers.dev)
+
 ## What it includes
 
 - Live camera and local video assessment with MediaPipe Pose Landmarker
@@ -67,4 +71,10 @@ Do not commit `.env` files, patient exports, or other health information.
 
 The app uses vinext and Cloudflare-compatible Worker output. Hosting bindings
 are declared in `.openai/hosting.json`, while local development bindings live
-in `vite.config.ts`.
+in `vite.config.ts`. The production Worker is named `physiotwin-patient` and is
+available at <https://physiotwin-patient.nirajbots.workers.dev>.
+
+```bash
+npm run build
+npx wrangler deploy
+```
