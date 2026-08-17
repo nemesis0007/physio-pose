@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   advanceProtocol,
+  getPoseMetrics,
   initialRepTracker,
+  smoothPoseMetrics,
 } from "../app/movement.ts";
 
 const profile = {
@@ -30,6 +32,25 @@ function metrics(kneeAngle, trunkLean = 5) {
 
 function step(tracker, value, now) {
   return advanceProtocol(tracker, metrics(value), profile, now);
+}
+
+const LEFT_LANDMARKS = [11, 13, 15, 23, 25, 27, 29, 31];
+const RIGHT_LANDMARKS = [12, 14, 16, 24, 26, 28, 30, 32];
+
+function landmarkFrame(leftVisibility, rightVisibility) {
+  const landmarks = Array.from({ length: 33 }, (_, index) => ({
+    x: 0.12 + (index % 6) * 0.12,
+    y: 0.12 + Math.floor(index / 6) * 0.12,
+    z: (index % 3) * 0.01,
+    visibility: 0.95,
+  }));
+  for (const index of LEFT_LANDMARKS) {
+    landmarks[index].visibility = leftVisibility;
+  }
+  for (const index of RIGHT_LANDMARKS) {
+    landmarks[index].visibility = rightVisibility;
+  }
+  return landmarks;
 }
 
 test("does not count when tracking begins halfway through a rep", () => {
@@ -76,4 +97,44 @@ test("rejects an unrealistically fast threshold bounce", () => {
     if (result.decision) decisions += 1;
   }
   assert.equal(decisions, 0);
+});
+
+test("keeps the tracked side stable through small visibility changes", () => {
+  const initial = getPoseMetrics(landmarkFrame(0.86, 0.8));
+  assert.equal(initial?.side, "left");
+
+  const nearlyEven = getPoseMetrics(
+    landmarkFrame(0.78, 0.84),
+    undefined,
+    initial?.side,
+  );
+  assert.equal(nearlyEven?.side, "left");
+  assert.equal(Number(nearlyEven?.confidence.toFixed(2)), 0.78);
+
+  const clearlyBetterRight = getPoseMetrics(
+    landmarkFrame(0.64, 0.92),
+    undefined,
+    nearlyEven?.side,
+  );
+  assert.equal(clearlyBetterRight?.side, "right");
+});
+
+test("dampens low-confidence angle changes more than clear frames", () => {
+  const measured = getPoseMetrics(landmarkFrame(0.95, 0.72));
+  assert.ok(measured);
+  const previous = { ...measured, kneeAngle: 170 };
+  const lowConfidence = smoothPoseMetrics(previous, {
+    ...measured,
+    kneeAngle: 90,
+    confidence: 0.66,
+  });
+  const highConfidence = smoothPoseMetrics(previous, {
+    ...measured,
+    kneeAngle: 90,
+    confidence: 0.98,
+  });
+
+  assert.ok(lowConfidence.kneeAngle < previous.kneeAngle);
+  assert.ok(highConfidence.kneeAngle < lowConfidence.kneeAngle);
+  assert.equal(lowConfidence.confidence, 0.66);
 });

@@ -21,6 +21,7 @@ import {
   initialRepTracker,
   metricValue,
   REQUIRED_CONFIDENCE,
+  smoothPoseMetrics,
   validatePoseFrame,
   type PoseMetrics,
   type RepDecision,
@@ -149,76 +150,6 @@ const PHASE_COPY: Record<RepPhase, string> = {
 };
 
 const MAX_VIDEO_BYTES = 250 * 1024 * 1024;
-const SMOOTHING_ALPHA = 0.32;
-
-function interpolate(previous: number, current: number) {
-  return previous + (current - previous) * SMOOTHING_ALPHA;
-}
-
-function smoothMetrics(
-  previous: PoseMetrics | null,
-  current: PoseMetrics,
-): PoseMetrics {
-  if (!previous || previous.side !== current.side) return current;
-  return {
-    kneeAngle: interpolate(previous.kneeAngle, current.kneeAngle),
-    kneeBend: interpolate(previous.kneeBend, current.kneeBend),
-    hipAngle: interpolate(previous.hipAngle, current.hipAngle),
-    shoulderAngle: interpolate(
-      previous.shoulderAngle,
-      current.shoulderAngle,
-    ),
-    elbowAngle: interpolate(previous.elbowAngle, current.elbowAngle),
-    elbowBend: interpolate(previous.elbowBend, current.elbowBend),
-    ankleAngle: interpolate(previous.ankleAngle, current.ankleAngle),
-    trunkLean: interpolate(previous.trunkLean, current.trunkLean),
-    pelvisTilt: interpolate(previous.pelvisTilt, current.pelvisTilt),
-    wristSpan: interpolate(previous.wristSpan, current.wristSpan),
-    kneeSpan: interpolate(previous.kneeSpan, current.kneeSpan),
-    ankleSpan: interpolate(previous.ankleSpan, current.ankleSpan),
-    heelLift: interpolate(previous.heelLift, current.heelLift),
-    reachSpan: interpolate(previous.reachSpan, current.reachSpan),
-    singleLegLift: interpolate(
-      previous.singleLegLift,
-      current.singleLegLift,
-    ),
-    confidence: current.confidence,
-    side: current.side,
-    leftKneeAngle: interpolate(
-      previous.leftKneeAngle,
-      current.leftKneeAngle,
-    ),
-    rightKneeAngle: interpolate(
-      previous.rightKneeAngle,
-      current.rightKneeAngle,
-    ),
-    leftElbowBend: interpolate(
-      previous.leftElbowBend,
-      current.leftElbowBend,
-    ),
-    rightElbowBend: interpolate(
-      previous.rightElbowBend,
-      current.rightElbowBend,
-    ),
-    leftShoulderAngle: interpolate(
-      previous.leftShoulderAngle,
-      current.leftShoulderAngle,
-    ),
-    rightShoulderAngle: interpolate(
-      previous.rightShoulderAngle,
-      current.rightShoulderAngle,
-    ),
-    leftHipAngle: interpolate(previous.leftHipAngle, current.leftHipAngle),
-    rightHipAngle: interpolate(
-      previous.rightHipAngle,
-      current.rightHipAngle,
-    ),
-    symmetryScore: interpolate(
-      previous.symmetryScore,
-      current.symmetryScore,
-    ),
-  };
-}
 
 function escapeReportText(value: string) {
   return value.replace(
@@ -582,7 +513,11 @@ export function PhysioTwinApp() {
         return;
       }
 
-      const rawMetrics = getPoseMetrics(landmarks, worldLandmarks);
+      const rawMetrics = getPoseMetrics(
+        landmarks,
+        worldLandmarks,
+        lastRawMetricsRef.current?.side,
+      );
       if (!rawMetrics) return;
 
       const previousRaw = lastRawMetricsRef.current;
@@ -607,7 +542,7 @@ export function PhysioTwinApp() {
         }
       }
 
-      const nextMetrics = smoothMetrics(
+      const nextMetrics = smoothPoseMetrics(
         smoothedMetricsRef.current,
         rawMetrics,
       );

@@ -91,6 +91,8 @@ const REQUIRED_TRANSITION_FRAMES = 3;
 const MIN_MOVEMENT_PHASE_MS = 180;
 const MIN_TARGET_PHASE_MS = 160;
 const MIN_COMPLETE_REP_MS = 650;
+const SIDE_SWITCH_MARGIN = 0.12;
+const MIN_STABLE_SIDE_CONFIDENCE = 0.6;
 const CORE_LANDMARKS = [11, 12, 23, 24, 25, 26, 27, 28] as const;
 
 function visibility(point: NormalizedLandmark) {
@@ -170,6 +172,7 @@ export function angleAt(
 export function getPoseMetrics(
   landmarks: NormalizedLandmark[],
   worldLandmarks?: Landmark[],
+  preferredSide?: PoseMetrics["side"],
 ): PoseMetrics | null {
   if (landmarks.length < 33) return null;
 
@@ -219,11 +222,19 @@ export function getPoseMetrics(
   const rightConfidence = average(
     Object.values(right).map((point) => visibility(point)),
   );
-  const selected = leftConfidence >= rightConfidence ? left : right;
-  const selectedSpatial =
-    leftConfidence >= rightConfidence ? spatialLeft : spatialRight;
-  const side = leftConfidence >= rightConfidence ? "left" : "right";
-  const confidence = Math.max(leftConfidence, rightConfidence);
+  const strongestSide = leftConfidence >= rightConfidence ? "left" : "right";
+  const preferredConfidence =
+    preferredSide === "left" ? leftConfidence : rightConfidence;
+  const strongestConfidence = Math.max(leftConfidence, rightConfidence);
+  const side =
+    preferredSide &&
+    preferredConfidence >= MIN_STABLE_SIDE_CONFIDENCE &&
+    strongestConfidence - preferredConfidence < SIDE_SWITCH_MARGIN
+      ? preferredSide
+      : strongestSide;
+  const selected = side === "left" ? left : right;
+  const selectedSpatial = side === "left" ? spatialLeft : spatialRight;
+  const confidence = side === "left" ? leftConfidence : rightConfidence;
 
   const torsoLength = Math.max(
     distance(selected.shoulder, selected.hip),
@@ -362,6 +373,94 @@ export function getPoseMetrics(
     leftHipAngle,
     rightHipAngle,
     symmetryScore,
+  };
+}
+
+function adaptiveSmoothingAlpha(confidence: number) {
+  return clamp(0.08 + clamp(confidence, 0, 1) * 0.32, 0.2, 0.4);
+}
+
+function smoothValue(previous: number, current: number, alpha: number) {
+  return previous + (current - previous) * alpha;
+}
+
+export function smoothPoseMetrics(
+  previous: PoseMetrics | null,
+  current: PoseMetrics,
+): PoseMetrics {
+  if (!previous || previous.side !== current.side) return current;
+  const alpha = adaptiveSmoothingAlpha(current.confidence);
+  return {
+    kneeAngle: smoothValue(previous.kneeAngle, current.kneeAngle, alpha),
+    kneeBend: smoothValue(previous.kneeBend, current.kneeBend, alpha),
+    hipAngle: smoothValue(previous.hipAngle, current.hipAngle, alpha),
+    shoulderAngle: smoothValue(
+      previous.shoulderAngle,
+      current.shoulderAngle,
+      alpha,
+    ),
+    elbowAngle: smoothValue(previous.elbowAngle, current.elbowAngle, alpha),
+    elbowBend: smoothValue(previous.elbowBend, current.elbowBend, alpha),
+    ankleAngle: smoothValue(previous.ankleAngle, current.ankleAngle, alpha),
+    trunkLean: smoothValue(previous.trunkLean, current.trunkLean, alpha),
+    pelvisTilt: smoothValue(previous.pelvisTilt, current.pelvisTilt, alpha),
+    wristSpan: smoothValue(previous.wristSpan, current.wristSpan, alpha),
+    kneeSpan: smoothValue(previous.kneeSpan, current.kneeSpan, alpha),
+    ankleSpan: smoothValue(previous.ankleSpan, current.ankleSpan, alpha),
+    heelLift: smoothValue(previous.heelLift, current.heelLift, alpha),
+    reachSpan: smoothValue(previous.reachSpan, current.reachSpan, alpha),
+    singleLegLift: smoothValue(
+      previous.singleLegLift,
+      current.singleLegLift,
+      alpha,
+    ),
+    confidence: current.confidence,
+    side: current.side,
+    leftKneeAngle: smoothValue(
+      previous.leftKneeAngle,
+      current.leftKneeAngle,
+      alpha,
+    ),
+    rightKneeAngle: smoothValue(
+      previous.rightKneeAngle,
+      current.rightKneeAngle,
+      alpha,
+    ),
+    leftElbowBend: smoothValue(
+      previous.leftElbowBend,
+      current.leftElbowBend,
+      alpha,
+    ),
+    rightElbowBend: smoothValue(
+      previous.rightElbowBend,
+      current.rightElbowBend,
+      alpha,
+    ),
+    leftShoulderAngle: smoothValue(
+      previous.leftShoulderAngle,
+      current.leftShoulderAngle,
+      alpha,
+    ),
+    rightShoulderAngle: smoothValue(
+      previous.rightShoulderAngle,
+      current.rightShoulderAngle,
+      alpha,
+    ),
+    leftHipAngle: smoothValue(
+      previous.leftHipAngle,
+      current.leftHipAngle,
+      alpha,
+    ),
+    rightHipAngle: smoothValue(
+      previous.rightHipAngle,
+      current.rightHipAngle,
+      alpha,
+    ),
+    symmetryScore: smoothValue(
+      previous.symmetryScore,
+      current.symmetryScore,
+      alpha,
+    ),
   };
 }
 
